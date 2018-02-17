@@ -10,6 +10,12 @@ namespace CodinGame.Tests
     public class Tests
     {
         [Fact]
+        public void Diagram()
+        {
+            Assert.Equal(2, Solution.Find("1 2|2 3|3 4|3 7|4 5|4 6|7 8".Split('|')));
+        }
+
+        [Fact]
         public void Test1()
         {
             Assert.Equal(2, Solution.Find("0 1|1 2|2 3|2 4".Split('|')));
