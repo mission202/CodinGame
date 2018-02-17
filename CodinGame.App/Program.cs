@@ -29,24 +29,31 @@ public class Solution
             people.AddUndirected(xi, yi);
         }
 
-        //Console.Error.WriteLine(string.Join(Environment.NewLine, people.OrderByDescending(x => x.Value.Count).Select(kvp => $"{kvp.Key}: {string.Join(", ", kvp.Value)}")));
+        Console.Error.WriteLine(string.Join(Environment.NewLine, people.OrderByDescending(x => x.Value.Count).Select(kvp => $"{kvp.Key}: {string.Join(", ", kvp.Value)}")));
 
         // TODO: Can we make this not search EVERYTHING?
-        var search = people
-            .Where(x => x.Value.Count > 1)
-            .OrderByDescending(g => g.Value.Count);
+        // Need to get a weighting from leaf > root nodes
+        var p1 = people.GetBFSPath(people.Keys.First());
+        var p2 = people.GetBFSPath(p1.Last());
+        Console.Error.WriteLine($"Path 1: {string.Join(" -> ", p1)} ({p1.Count()} Hops)");
+        Console.Error.WriteLine($"Path 2: {string.Join(" -> ", p2)} ({p2.Count()} Hops)");
+        var central = p2[p2.Length / 2];
+        Console.Error.WriteLine($"Central Node: {central}");
+        var search = people.Where(x => x.Key == central);
 
         var bestCount = int.MaxValue;
 
         foreach (var node in search)
         {
             var result = people.CountLayers(node.Key);
+
+            Console.Error.WriteLine($"Node: {node.Key} took {result} hours with {node.Value.Count} adjacents.");
+
             if (result < bestCount)
             {
                 bestCount = result;
+                Console.Error.WriteLine($"-- Best Time Updated to {result} hours.");
             }
-
-            //Console.Error.WriteLine($"Node: {node} took {result} hours.");
         };
 
         return bestCount;
@@ -105,5 +112,31 @@ public static class Extensions
         }
 
         return result;
+    }
+
+    public static int[] GetBFSPath(this Dictionary<int, HashSet<int>> graph, int startAt)
+    {
+        Console.Error.WriteLine($"Getting BFS Path for {startAt}");
+        var visited = new HashSet<int>();
+        var toSearch = new Queue<Tuple<int, int>>();
+
+        toSearch.Enqueue(Tuple.Create(startAt, 0));
+
+        while (toSearch.Count > 0)
+        {
+            var n = toSearch.Dequeue();
+            visited.Add(n.Item1);
+
+            var connected = graph[n.Item1];
+            var unvisited = connected.Where(k => !visited.Contains(k)).ToList();
+
+            foreach (var adjacent in unvisited)
+            {
+                visited.Add(adjacent);
+                toSearch.Enqueue(Tuple.Create(adjacent, n.Item2 + 1));
+            }
+        }
+
+        return visited.ToArray();
     }
 }
