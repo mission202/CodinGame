@@ -29,18 +29,26 @@ public class Solution
             people.AddUndirected(xi, yi);
         }
 
-        Console.Error.WriteLine(string.Join(Environment.NewLine, people.Select(kvp => $"{kvp.Key}: {string.Join(", ", kvp.Value)}")));
+        //Console.Error.WriteLine(string.Join(Environment.NewLine, people.OrderByDescending(x => x.Value.Count).Select(kvp => $"{kvp.Key}: {string.Join(", ", kvp.Value)}")));
 
-        // TODO: Brute Force 'Fastest Route'
+        // TODO: Can we make this not search EVERYTHING?
 
-        // Start with Most Connected?
-        var mostConnected = people
-            .OrderByDescending(x => x.Value.Count)
-            .First()
-            .Key;
+        var bestId = -1;
+        var bestCount = int.MaxValue;
 
-        // BFS to Coverage!
-        return people.CountLayers(mostConnected);
+        foreach (var node in people.Keys)
+        {
+            var result = people.CountLayers(node);
+            if (result < bestCount)
+            {
+                bestCount = result;
+                bestId = node;
+            }
+
+            //Console.Error.WriteLine($"Node: {node} took {result} hours.");
+        };
+
+        return bestCount;
     }
 }
 
@@ -71,7 +79,7 @@ public static class Extensions
 
     public static int CountLayers(this Dictionary<int, HashSet<int>> graph, int startAt)
     {
-        Console.Error.WriteLine($"Counting layers in Graph of {graph.Keys.Count} items from Node {startAt}");
+        //Console.Error.WriteLine($"Counting layers in Graph of {graph.Keys.Count} items from Node {startAt}");
 
         var visited = new HashSet<int>();
         var toSearch = new Queue<Tuple<int, int>>();
