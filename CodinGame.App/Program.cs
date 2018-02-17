@@ -32,17 +32,18 @@ public class Solution
         //Console.Error.WriteLine(string.Join(Environment.NewLine, people.OrderByDescending(x => x.Value.Count).Select(kvp => $"{kvp.Key}: {string.Join(", ", kvp.Value)}")));
 
         // TODO: Can we make this not search EVERYTHING?
+        var search = people
+            .Where(x => x.Value.Count > 1)
+            .OrderByDescending(g => g.Value.Count);
 
-        var bestId = -1;
         var bestCount = int.MaxValue;
 
-        foreach (var node in people.Keys)
+        foreach (var node in search)
         {
-            var result = people.CountLayers(node);
+            var result = people.CountLayers(node.Key);
             if (result < bestCount)
             {
                 bestCount = result;
-                bestId = node;
             }
 
             //Console.Error.WriteLine($"Node: {node} took {result} hours.");
