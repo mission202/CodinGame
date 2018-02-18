@@ -18,7 +18,7 @@ public class Solution
 
     public static int Find(IEnumerable<string> input)
     {
-        var people = new Dictionary<int, HashSet<int>>();
+        var people = new Graph(input);
 
         foreach (var line in input)
         {
@@ -29,25 +29,18 @@ public class Solution
             people.AddUndirected(xi, yi);
         }
 
-        Console.Error.WriteLine(string.Join(Environment.NewLine, people.OrderByDescending(x => x.Value.Count).Select(kvp => $"{kvp.Key}: {string.Join(", ", kvp.Value)}")));
-
         // TODO: Can we make this not search EVERYTHING?
-        // Need to get a weighting from leaf > root nodes
-        var p1 = people.GetBFSPath(people.Keys.First());
-        var p2 = people.GetBFSPath(p1.Last());
-        Console.Error.WriteLine($"Path 1: {string.Join(" -> ", p1)} ({p1.Count()} Hops)");
-        Console.Error.WriteLine($"Path 2: {string.Join(" -> ", p2)} ({p2.Count()} Hops)");
-        var central = p2[p2.Length / 2];
-        Console.Error.WriteLine($"Central Node: {central}");
-        var search = people.Where(x => x.Key == central);
+        var central = people.GetCentralNodes();
+        Console.Error.WriteLine($"Central Nodes: {central.CommaSeparated()}");
+        var search = people.Only(central);
 
         var bestCount = int.MaxValue;
 
-        foreach (var node in search)
+        foreach (var node in central)
         {
-            var result = people.CountLayers(node.Key);
+            var result = people.CountLayers(node);
 
-            Console.Error.WriteLine($"Node: {node.Key} took {result} hours with {node.Value.Count} adjacents.");
+            Console.Error.WriteLine($"Node: {node} took {result} hours.");
 
             if (result < bestCount)
             {
@@ -60,32 +53,99 @@ public class Solution
     }
 }
 
-public static class Extensions
+public class Graph
 {
-    public static Dictionary<int, HashSet<int>> AddUndirected(this Dictionary<int, HashSet<int>> dictionary, int a, int b)
+    private readonly Dictionary<int, HashSet<int>> _graph = new Dictionary<int, HashSet<int>>();
+
+    public Graph(Graph seed)
     {
-        if (dictionary.ContainsKey(a))
-        {
-            dictionary[a].Add(b);
-        }
-        else
-        {
-            dictionary.Add(a, new HashSet<int> { b });
-        }
-
-        if (dictionary.ContainsKey(b))
-        {
-            dictionary[b].Add(a);
-        }
-        else
-        {
-            dictionary.Add(b, new HashSet<int> { a });
-        }
-
-        return dictionary;
+        _graph = new Dictionary<int, HashSet<int>>();
+        seed._graph
+            .ToList()
+            .ForEach(kvp => _graph.Add(kvp.Key, new HashSet<int>(kvp.Value)));
     }
 
-    public static int CountLayers(this Dictionary<int, HashSet<int>> graph, int startAt)
+    public Graph(IEnumerable<string> input)
+    {
+        foreach (var line in input)
+        {
+            string[] inputs = line.Split(' ');
+            int xi = int.Parse(inputs[0]); // the ID of a person which is adjacent to yi
+            int yi = int.Parse(inputs[1]); // the ID of a person which is adjacent to xi
+
+            AddUndirected(xi, yi);
+        }
+    }
+
+    public Graph Remove(int node)
+    {
+        _graph.Remove(node);
+        _graph
+            .Where(x => x.Value.Contains(node))
+            .ToList()
+            .ForEach(x => x.Value.Remove(node));
+        return this;
+    }
+
+    public int[] GetCentralNodes()
+    {
+        var clone = new Graph(this);
+        var nodes = new HashSet<int>(clone._graph.Keys);
+
+        var counter = 0;
+
+        Console.Error.WriteLine($"Getting Central Node(s) for Graph: {clone._graph.Keys.CommaSeparated()}");
+
+        while (nodes.Count > 2)
+        {
+            // Get Outer-Edge Nodes
+            var leaves = clone._graph
+                .GroupBy(x => x.Value.Count)
+                .OrderBy(x => x.Key);
+
+            if (leaves.Count() == 1) {
+                return nodes.ToArray();
+            }
+
+            // Remove from Graph
+            foreach (var leaf in leaves.First())
+            {
+                Console.Error.WriteLine($"Removing Leaf Node {leaf.Key}");
+
+                clone.Remove(leaf.Key);
+                nodes.Remove(leaf.Key);
+            }
+
+            if (nodes.Count < 3) break;
+        }
+
+        return nodes.ToArray();
+    }
+
+    public Dictionary<int, HashSet<int>> AddUndirected(int a, int b)
+    {
+        if (_graph.ContainsKey(a))
+        {
+            _graph[a].Add(b);
+        }
+        else
+        {
+            _graph.Add(a, new HashSet<int> { b });
+        }
+
+        if (_graph.ContainsKey(b))
+        {
+            _graph[b].Add(a);
+        }
+        else
+        {
+            _graph.Add(b, new HashSet<int> { a });
+        }
+
+        return _graph;
+    }
+
+    public int CountLayers(int startAt)
     {
         //Console.Error.WriteLine($"Counting layers in Graph of {graph.Keys.Count} items from Node {startAt}");
 
@@ -101,7 +161,7 @@ public static class Extensions
             if (n.Item2 > result) result = n.Item2;
             visited.Add(n.Item1);
 
-            var connected = graph[n.Item1];
+            var connected = _graph[n.Item1];
             var unvisited = connected.Where(k => !visited.Contains(k)).ToList();
 
             foreach (var adjacent in unvisited)
@@ -114,9 +174,22 @@ public static class Extensions
         return result;
     }
 
+    public IEnumerable<KeyValuePair<int, HashSet<int>>> Only(IEnumerable<int> ids)
+    {
+        return _graph.Where(x => ids.Contains(x.Key)).ToList();
+    }
+}
+
+public static class Extensions
+{
+    public static string CommaSeparated(this IEnumerable<int> items)
+    {
+        return string.Join(", ", items);
+    }
+
     public static int[] GetBFSPath(this Dictionary<int, HashSet<int>> graph, int startAt)
     {
-        Console.Error.WriteLine($"Getting BFS Path for {startAt}");
+        //Console.Error.WriteLine($"Getting BFS Path for {startAt}");
         var visited = new HashSet<int>();
         var toSearch = new Queue<Tuple<int, int>>();
 
@@ -138,5 +211,34 @@ public static class Extensions
         }
 
         return visited.ToArray();
+    }
+
+    public static int[] GetCentralNodes(this Dictionary<int, HashSet<int>> graph)
+    {
+        var nodes = new HashSet<int>(graph.Keys);
+        var central = nodes.Count % 2 == 0 ? 2 : 1;
+
+        Console.Error.WriteLine($"Getting Central {(central == 1 ? "Node" : "Nodes")} for Graph of {graph.Keys.Count} items");
+
+
+        while (nodes.Count > central)
+        {
+            // Get Leaf Nodes
+            var leaves = graph.Where(x => nodes.Contains(x.Key) && x.Value.Count == 1).ToList();
+
+            // Remove from Graph
+            foreach (var leaf in leaves)
+            {
+                graph.Remove(leaf.Key);
+
+                // Remove from Adjacents
+                var connected = graph.Where(x => x.Value.Contains(leaf.Key)).ToList();
+                connected.ForEach(x => x.Value.Remove(leaf.Key));
+
+                nodes.Remove(leaf.Key);
+            }
+        }
+
+        return nodes.ToArray();
     }
 }
