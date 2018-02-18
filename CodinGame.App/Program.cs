@@ -20,15 +20,6 @@ public class Solution
     {
         var people = new Graph(input);
 
-        foreach (var line in input)
-        {
-            string[] inputs = line.Split(' ');
-            int xi = int.Parse(inputs[0]); // the ID of a person which is adjacent to yi
-            int yi = int.Parse(inputs[1]); // the ID of a person which is adjacent to xi
-
-            people.AddUndirected(xi, yi);
-        }
-
         // TODO: Can we make this not search EVERYTHING?
         var central = people.GetCentralNodes();
         Console.Error.WriteLine($"Central Nodes: {central.CommaSeparated()}");
