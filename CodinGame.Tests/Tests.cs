@@ -10,15 +10,6 @@ namespace CodinGame.Tests
     public class Tests
     {
         [Fact]
-        public void GetCentralNode()
-        {
-            Assert.Equal(3, new Graph("1 2|2 3|3 4|3 7|4 5|4 6|7 8".Split('|')).GetCentralNodes()[0]);
-            Assert.Equal(2, new Graph("1 3|2 3|2 4|4 5".Split('|')).GetCentralNodes()[0]);
-            Assert.Equal(new[] { 2, 3 }, new Graph("1 2|1 3|2 3|2 4|3 4".Split('|')).GetCentralNodes());
-            Assert.Equal(new[] { 1, 2, 3 }, new Graph("1 2|1 3|2 3|2 4|3 5|2 6".Split('|')).GetCentralNodes());
-        }
-
-        [Fact]
         public void Diagram()
         {
             Assert.Equal(2, Solution.Find("1 2|2 3|3 4|3 7|4 5|4 6|7 8".Split('|')));
