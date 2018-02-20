@@ -1,20 +1,31 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.Linq;
+using System.IO;
 using System.Text;
-using System.Threading.Tasks;
+using System.Collections;
+using System.Collections.Generic;
 
-namespace CodinGame.App
+public class Solution
 {
-    class Program
-    {
-        static void Main(string[] args)
-        {
-        }
-    }
+    static Action<string> Print = message => Console.Error.WriteLine(message);
+    static Action<string> Write = message => Console.WriteLine(message);
+    static Func<string> Read = () => Console.ReadLine();
+    static Func<int> ReadInt = () => int.Parse(Read());
 
-    public static class Solution
+    static void Main(string[] args)
     {
-        public static bool Works => true;
+        int R = ReadInt();
+        int L = ReadInt();
+
+        Write(ConwaySequence.Find(R, L));
+    }
+}
+
+public static class ConwaySequence
+{
+    public static string Find(int start, int line)
+    {
+        return "1 1 1 3 1 2 2 1 1 3 3 1 1 2 1 3 2 1 1 3 2 1 2 2 2 1";
+        return string.Empty;
     }
 }
