@@ -60,7 +60,7 @@ public static class ConwaySequence
             D.Print(lines.Pretty());
         }
 
-        return lines.SpacedOut(); // o_O
+        return lines.Last().SpacedOut(); // o_O
     }
 }
 
