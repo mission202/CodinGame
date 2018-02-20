@@ -16,6 +16,8 @@ public static class Solution
 
     public static int Find(IEnumerable<string> input)
     {
+        // Thanks http://fooplot.com for the visualisation!
+
         if (input.Count() < 2)
             return 0;
 
@@ -33,13 +35,6 @@ public static class Solution
         var maxX = coordinates.Max(h => h.X);
         var minY = coordinates.Min(h => h.Y);
         var maxY = coordinates.Max(h => h.Y);
-
-        //var options = new Dictionary<int, int>();
-        //Enumerable.Range(minY, (maxY - minY) + 1).ToList()
-        //    .ForEach(i => options.Add(i, 0));
-
-        //Console.Error.WriteLine($"Options for Mainline: {options.Keys.Min()} -> {options.Keys.Max()}");
-
         var median = coordinates.OrderBy(c => c.Y).GetMedian().Y;
         Console.Error.WriteLine($"Median: {median}");
 
@@ -47,10 +42,9 @@ public static class Solution
 
         for (int x = minX; x < (maxX + 1); x++)
         {
-            // Check for Houses
             var houses = groupedByX.SingleOrDefault(g => g.Key == x);
 
-            if (houses.Any())
+            if (houses != null)
             {
                 // Calculate Distance to each how up/down.
                 var houseCable = houses.Select(h =>
@@ -62,33 +56,13 @@ public static class Solution
                 .Sum();
 
                 result += houseCable;
-                //var toRemove = options.Keys.Where(key => key < houseMinY || key > houseMaxY).ToList();
-                //toRemove.ForEach(key => options.Remove(key));
-
-                // Remaining Options, Calculate Distance
-                // TODO:
             }
 
             if (x != maxX)
                 result++; // +1 for the X
 
             Console.Error.WriteLine($"Cable Distance Now @ {result}.");
-
-            // Add +1 Distance to All Options for X Increment
-            //options.Keys.ToList().ForEach(key => options[key] = options[key] + 1);
-
-            // Add Calculated Distance for Mainline Options
-
-            // Remove Blocked Options
         }
-
-        //foreach (var group in groupedByX)
-        //{
-        //    var gMinY = group.Min(h => h.Y);
-        //    var gMaxY = group.Max(h => h.Y);
-
-        //    Console.Error.WriteLine($"X-Axis Group: {group.Key} - MinY: {gMinY}, MaxY: {gMaxY}");
-        //}
 
         return result;
     }
