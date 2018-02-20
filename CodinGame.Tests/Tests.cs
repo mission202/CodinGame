@@ -3,17 +3,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using CodinGame.App;
 using Xunit;
 
 namespace CodinGame.Tests
 {
     public class Tests
     {
-        [Fact]
-        public void TestsWork()
+        [Theory]
+        [InlineData(4, "0 0|1 1|2 2")]
+        [InlineData(4, "1 2|0 0|2 2")]
+        [InlineData(5, "1 2|0 0|2 2|1 3")]
+        [InlineData(0, "1 1")]
+        public void Examples(int expected, string input)
         {
-            Assert.True(Solution.Works);
+            Assert.Equal(expected, Solution.Find(input.Split('|')));
         }
     }
 }
