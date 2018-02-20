@@ -14,7 +14,7 @@ public static class Solution
         Console.WriteLine(Find(input));
     }
 
-    public static int Find(IEnumerable<string> input)
+    public static long Find(IEnumerable<string> input)
     {
         // Thanks http://fooplot.com for the visualisation!
 
@@ -38,30 +38,24 @@ public static class Solution
         var median = coordinates.OrderBy(c => c.Y).GetMedian().Y;
         Console.Error.WriteLine($"Median: {median}");
 
-        var result = 0;
+        long result = 0;
 
-        for (int x = minX; x < (maxX + 1); x++)
+        // Add Distance from xMin  to xMax for Houses
+        result += (maxX - minX);
+
+        // For Each House, Add Their Distance from Median
+        foreach (var houseGroup in groupedByX)
         {
-            var houses = groupedByX.SingleOrDefault(g => g.Key == x);
-
-            if (houses != null)
-            {
-                // Calculate Distance to each how up/down.
-                var houseCable = houses.Select(h =>
+            // Calculate Distance to each how up/down.
+                var houseCable = houseGroup.Select(h =>
                 {
-                    int toHouse = Math.Abs(h.Y - median);
+                    var toHouse = Math.Abs(h.Y - median);
                     Console.Error.WriteLine($"{toHouse} to house {h}");
                     return toHouse;
                 })
                 .Sum();
 
                 result += houseCable;
-            }
-
-            if (x != maxX)
-                result++; // +1 for the X
-
-            Console.Error.WriteLine($"Cable Distance Now @ {result}.");
         }
 
         return result;
@@ -70,8 +64,8 @@ public static class Solution
 
 public struct Coordinate
 {
-    public int X { get; set; }
-    public int Y { get; set; }
+    public long X { get; set; }
+    public long Y { get; set; }
 
     public Coordinate(string input)
     {

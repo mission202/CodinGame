@@ -19,5 +19,12 @@ namespace CodinGame.Tests
         {
             Assert.Equal(expected, Solution.Find(input.Split('|')));
         }
+
+        [Theory]
+        [InlineData(6066790161, "-28189131 593661218|102460950 1038903636|938059973 -816049599|-334087877 -290840615|842560881 -116496866|-416604701 690825290|19715507 470868309|846505116 -694479954")]
+        public void EfficiencyExamples(long expected, string input)
+        {
+            Assert.Equal(expected, Solution.Find(input.Split('|')));
+        }
     }
 }
