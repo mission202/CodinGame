@@ -33,7 +33,7 @@ namespace CodinGame.Tests
         [Fact]
         public void TestEncoding()
         {
-            Assert.Equal(new[] { '2', '1' }, '1'.EncodeChar(2));
+            Assert.Equal(new[] { 2, 1 }, 1.Encode(2));
         }
     }
 }

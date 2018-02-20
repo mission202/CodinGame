@@ -31,26 +31,26 @@ public static class ConwaySequence
         if (targetLine == 1)
             return start.ToString();
 
-        var lines = new List<char[]> { new[] { start.ToString()[0] } };
+        var lines = new List<int[]> { new[] { start } };
 
         for (int currentLine = 1; currentLine < targetLine; currentLine++)
         {
             var line = lines.Last();
             D.Print($"Encoding Line {currentLine}: {string.Join(" ", line)}");
 
-            var encoded = new List<char>();
+            var encoded = new List<int>();
             var count = 0;
 
-            for (int charIdx = 0; charIdx < line.Length; charIdx++)
+            for (int i = 0; i < line.Length; i++)
             {
                 count++;
-                var current = line[charIdx];
+                var current = line[i];
 
-                if (charIdx + 1 == line.Length || line[charIdx + 1] != current)
+                if (i + 1 == line.Length || line[i + 1] != current)
                 {
                     // Encode and close this 'block'
-                    D.Print($"Encoding: {(char)(48 + count)} * {current}");
-                    encoded.AddRange(current.EncodeChar(count));
+                    D.Print($"Encoding: {count} * {current}");
+                    encoded.AddRange(current.Encode(count));
                     count = 0;
                 }
             }
@@ -66,27 +66,27 @@ public static class ConwaySequence
 
 public static class Extensions
 {
-    public static string SpacedOut(this IEnumerable<char> chars)
+    public static string SpacedOut(this IEnumerable<int> chars)
     {
         return string.Join(" ", chars);
     }
 
-    public static string SpacedOut(this IEnumerable<char[]> lines)
+    public static string SpacedOut(this IEnumerable<int[]> lines)
     {
         return string.Join(" ", lines.Select(l => l.SpacedOut()));
     }
 
-    public static string Pretty(this IEnumerable<char[]> lines)
+    public static string Pretty(this IEnumerable<int[]> lines)
     {
         return string.Join(Environment.NewLine, lines.Select(l => l.SpacedOut()));
     }
 
-    public static char[] EncodeChar(this char @char, int count)
+    public static int[] Encode(this int @int, int count)
     {
-        return new char[]
+        return new int[]
         {
-           (char)(48 + count),
-           @char
+            count,
+            @int
         };
     }
 }
