@@ -1,20 +1,26 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.Linq;
+using System.IO;
 using System.Text;
-using System.Threading.Tasks;
+using System.Collections;
+using System.Collections.Generic;
 
-namespace CodinGame.App
+/**
+ * Auto-generated code below aims at helping you parse
+ * the standard input according to the problem statement.
+ **/
+public class Solution
 {
-    class Program
+    static void Main(string[] args)
     {
-        static void Main(string[] args)
-        {
-        }
+        var input = Enumerable.Range(0, int.Parse(Console.ReadLine()))
+            .Select(i => Console.ReadLine())
+            .ToArray();
+        Console.WriteLine(Find(input));
     }
 
-    public static class Solution
+    public static int Find(IEnumerable<string> numbers)
     {
-        public static bool Works => true;
+        return 10;
     }
 }

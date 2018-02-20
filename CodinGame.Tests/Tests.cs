@@ -3,17 +3,18 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using CodinGame.App;
 using Xunit;
 
 namespace CodinGame.Tests
 {
     public class Tests
     {
-        [Fact]
-        public void TestsWork()
+        [Theory]
+        [InlineData("0467123456", 10)]
+        public void Examples(string numbers, int expected)
         {
-            Assert.True(Solution.Works);
+            var split = numbers.Split('|');
+            Assert.Equal(expected, Solution.Find(split));
         }
     }
 }
