@@ -52,6 +52,7 @@ public class Bender
 {
     private readonly Coordinate _goal;
     private readonly Grid<char> _map;
+    private readonly Priorities _priorities = new Priorities();
 
     private Coordinate _position;
     private string _currentDirection;
@@ -88,18 +89,22 @@ public class Bender
                 Console.Error.WriteLine($"Current direction changed to '{_currentDirection}' due to tile '{_map[_position.X, _position.Y]}'");
             }
 
-            var priorities = new string[] { _currentDirection, Directions.SOUTH, Directions.EAST, Directions.NORTH, Directions.WEST };
-            for (int i = 0; i < priorities.Length; i++)
+            var checking = _currentDirection;
+            for (int i = 0; i < _priorities.Length; i++)
             {
                 // Clear? GO!
-                var coord = _position.Move(priorities[i]);
-                Console.Error.WriteLine($"Checking {coord} going {priorities[i]}");
+                var coord = _position.Move(checking);
+                Console.Error.WriteLine($"Checking {coord} going {checking}");
                 if (CanMove(coord))
                 {
                     Console.Error.WriteLine($"Moving to {coord}");
                     _position = coord;
-                    _currentDirection = priorities[i];
-                    return priorities[i];
+                    _currentDirection = checking;
+                    return checking;
+                }
+                else
+                {
+                    checking = _priorities.Next(checking);
                 }
             }
 
@@ -118,9 +123,11 @@ public class Bender
 
 public class Priorities
 {
-    private char[]  _priorities = new char[] { 'S', 'E', 'N', 'W' };
+    private string[] _priorities = new string[] { Directions.SOUTH, Directions.EAST, Directions.NORTH, Directions.WEST };
 
-    public char Next(char current)
+    public int Length => _priorities.Length;
+
+    public string Next(string current)
     {
         var idx = (Array.IndexOf(_priorities, current) + 1) % _priorities.Length;
         return _priorities[idx];

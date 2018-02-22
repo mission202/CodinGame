@@ -92,9 +92,9 @@ namespace CodinGame.Tests
     public class PriorityTests
     {
         [Theory]
-        [InlineData('S', 'E')]
-        [InlineData('W', 'S')]
-        public void CanGetNextPriority(char input, char expected)
+        [InlineData(Directions.SOUTH, Directions.EAST)]
+        [InlineData(Directions.WEST, Directions.SOUTH)]
+        public void CanGetNextPriority(string input, string expected)
         {
             var p = new Priorities();
             Assert.Equal(expected, p.Next(input));
@@ -104,9 +104,9 @@ namespace CodinGame.Tests
         public void CanReversePriorities()
         {
             var p = new Priorities();
-            Assert.Equal('E', p.Next('S')); // Default
+            Assert.Equal(Directions.EAST, p.Next(Directions.SOUTH)); // Default
             p.Reverse();
-            Assert.Equal('W', p.Next('S'));
+            Assert.Equal(Directions.WEST, p.Next(Directions.SOUTH));
 
         }
     }
