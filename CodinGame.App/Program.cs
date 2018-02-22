@@ -26,14 +26,10 @@ public static class Solution
 
     public static IEnumerable<string> Find(IEnumerable<string> input)
     {
-        // Draw Grid
         var grid = input.ToGrid();
-
         Console.Error.WriteLine(grid.Draw());
 
         var bender = new Bender(grid);
-
-        // Priorities S, E, N, W (Can be Reversed)
 
         var result = new List<string>();
         while (bender.Navigating)
@@ -41,10 +37,7 @@ public static class Solution
             Console.Error.WriteLine($"{bender}");
             result.Add(bender.Next);
         }
-
         return result.ToArray();
-
-        return new string[] { "SOUTH", "SOUTH", "EAST", "EAST" };
     }
 }
 
@@ -129,8 +122,7 @@ public class Priorities
 
     public string Next(string current)
     {
-        var idx = (Array.IndexOf(_priorities, current) + 1) % _priorities.Length;
-        return _priorities[idx];
+        return _priorities[(Array.IndexOf(_priorities, current) + 1) % _priorities.Length];
     }
 
     public void Reverse()
