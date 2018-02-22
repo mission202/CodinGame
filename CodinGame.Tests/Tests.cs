@@ -18,6 +18,14 @@ namespace CodinGame.Tests
         }
 
         [Fact]
+        public void SmallExample()
+        {
+            var input = "6 5|######|#@E $#|# N  #|#X   #|######".Split('|');
+            var expected = "SOUTH|EAST|NORTH|EAST|EAST".Split('|');
+            Assert.Equal(expected, Solution.Find(input));
+        }
+
+        [Fact]
         public void SimpleMoves()
         {
             var input = "5 5|#####|#@  #|#   #|#  $#|#####".Split('|');
@@ -31,6 +39,53 @@ namespace CodinGame.Tests
             var input = "8 8|########|# @    #|#     X#|# XXX  #|#   XX #|#   XX #|#     $#|########".Split('|');
             var expected = "SOUTH|EAST|EAST|EAST|SOUTH|EAST|SOUTH|SOUTH|SOUTH".Split('|');
             Assert.Equal(expected, Solution.Find(input));
+        }
+    }
+
+    public class BenderTests
+    {
+        [Fact]
+        public void MovesFirstPriority()
+        {
+            var grid = new Grid<char>(3, 3)
+                .AddRow(' ', '$', ' ')
+                .AddRow(' ', '@', ' ')
+                .AddRow(' ', ' ', ' ');
+            var bender = new Bender(grid);
+            Assert.Equal(Directions.SOUTH, bender.Next);
+        }
+
+        [Fact]
+        public void MovesSecondPriority()
+        {
+            var grid = new Grid<char>(3, 3)
+                .AddRow(' ', '$', ' ')
+                .AddRow(' ', '@', ' ')
+                .AddRow(' ', 'X', ' ');
+            var bender = new Bender(grid);
+            Assert.Equal(Directions.EAST, bender.Next);
+        }
+
+        [Fact]
+        public void MovesThirdPriority()
+        {
+            var grid = new Grid<char>(3, 3)
+                .AddRow(' ', ' ', ' ')
+                .AddRow('$', '@', 'X')
+                .AddRow(' ', 'X', ' ');
+            var bender = new Bender(grid);
+            Assert.Equal(Directions.NORTH, bender.Next);
+        }
+
+        [Fact]
+        public void MovesFourthPriority()
+        {
+            var grid = new Grid<char>(3, 3)
+                .AddRow(' ', 'X', '$')
+                .AddRow(' ', '@', 'X')
+                .AddRow(' ', 'X', ' ');
+            var bender = new Bender(grid);
+            Assert.Equal(Directions.WEST, bender.Next);
         }
     }
 
