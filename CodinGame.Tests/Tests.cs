@@ -10,6 +10,14 @@ namespace CodinGame.Tests
     public class Tests
     {
         [Fact]
+        public void Example()
+        {
+            var input = "10 10|##########|#        #|#  S   W #|#        #|#  $     #|#        #|#@       #|#        #|#E     N #|##########".Split('|');
+            var expected = "SOUTH|SOUTH|EAST|EAST|EAST|EAST|EAST|EAST|NORTH|NORTH|NORTH|NORTH|NORTH|NORTH|WEST|WEST|WEST|WEST|SOUTH|SOUTH".Split('|');
+            Assert.Equal(expected, Solution.Find(input));
+        }
+
+        [Fact]
         public void SimpleMoves()
         {
             var input = "5 5|#####|#@  #|#   #|#  $#|#####".Split('|');
@@ -39,6 +47,22 @@ namespace CodinGame.Tests
             Assert.Equal(1, grid[1,0]);
             Assert.Equal(2, grid[0,1]);
             Assert.Equal(3, grid[1,1]);
+        }
+
+        [Fact]
+        public void CanDraw()
+        {
+            var grid = new Grid<char>(2, 2)
+                .AddRow('X', 'O')
+                .AddRow('O', 'X');
+
+            var expLines = "XO|OX".Split('|');
+            var result = grid.Draw().Split(new [] { Environment.NewLine }, StringSplitOptions.None);
+
+            for (int i = 0; i < expLines.Length; i++)
+            {
+                Assert.Equal(expLines[i], result[i]);
+            }
         }
     }
 }

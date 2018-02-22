@@ -60,7 +60,18 @@ public class Grid<T>
 
     public string Draw()
     {
-        return string.Empty;
+        var result = new StringBuilder();
+
+        for (int y = 0; y < Height; y++)
+        {
+            for (int x = 0; x < Width; x++)
+            {
+                result.Append(_data[x, y]).ToString();
+            }
+            result.AppendLine();
+        }
+
+        return result.ToString();;
     }
 
     public Grid<T> AddRow(params T[] row)
@@ -89,7 +100,7 @@ public static class Extensions
         var dimensions = inputs[0].Split(' ');
         var grid = new Grid<char>(int.Parse(dimensions[1]), int.Parse(dimensions[0]));
 
-        for (int y = 1; y < grid.Height; y++)
+        for (int y = 1; y <= grid.Height; y++)
         {
             grid.AddRow(inputs[y].ToCharArray());
         }
