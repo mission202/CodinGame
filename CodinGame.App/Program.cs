@@ -60,7 +60,11 @@ public class Bender
 
     public bool Navigating
     {
-        get { return _position != _goal; }
+        get
+        {
+            Console.Error.WriteLine($"Navigating: {_position} {_goal}");
+            return _position != _goal;
+        }
     }
 
     public bool CanMove(Coordinate coordinate)
@@ -213,7 +217,7 @@ public struct Coordinate
 
     public static bool operator !=(Coordinate a, Coordinate b)
     {
-        return a.X != b.X && a.Y != b.Y;
+        return a.X != b.X || a.Y != b.Y;
     }
 
     public override string ToString()
