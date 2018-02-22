@@ -33,9 +33,7 @@ public static class Solution
 
     public static IEnumerable<string> Find(IEnumerable<string> input)
     {
-        var grid = input.ToGrid();
-        var bender = new Bender(grid);
-        return bender.GetPath();
+        return new Bender(input.ToGrid()).GetPath();
     }
 }
 
@@ -58,21 +56,14 @@ public class Bender
         _map = map;
         _currentDirection = Directions.SOUTH;
         _position = map.Single('@');
-
-        var teleporters = _map.All('T').ToArray();
-
-        if (teleporters.Count() == 2)
-        {
-            _teleporters.Add(teleporters[0], teleporters[1]);
-            _teleporters.Add(teleporters[1], teleporters[0]);
-        }
+        _teleporters.AddFrom(map);
     }
 
     private bool Navigating => !_looping && _position != _goal;
 
     public bool CanMove(Coordinate coordinate)
     {
-        var value = _map[coordinate.X, coordinate.Y];
+        var value = _map[coordinate];
 
         if (value == '#') return false;
         if (value == 'X') return _breakerMode;
@@ -96,58 +87,38 @@ public class Bender
     {
         get
         {
-            // Move if Directed by Square
-            if (new[] { 'N', 'S', 'E', 'W' }.Contains(_map[_position.X, _position.Y]))
-                _currentDirection = Directions.FromChar(_map[_position.X, _position.Y]);
+            if (new[] { 'N', 'S', 'E', 'W' }.Contains(_map[_position]))
+                _currentDirection = Directions.FromChar(_map[_position]);
 
-            if (_map[_position.X, _position.Y] == 'B')
-                _breakerMode = !_breakerMode;
+            if (_map[_position] == 'B') _breakerMode = !_breakerMode;
 
-            // Check Current Direction then cycle priorities
             var toCheck = _priorities.Next(_currentDirection);
 
             foreach (var direction in toCheck)
             {
-                // Clear? GO!
                 var coord = _position.Move(direction);
-                if (CanMove(coord))
-                {
-                    _position = (_map[coord.X, coord.Y] == 'T')
-                        ? _teleporters[coord]
-                        : _position = coord;
+                if (!CanMove(coord)) continue;
 
-                    if (_map[coord.X, coord.Y] == 'I')
-                        _priorities.Reverse();
+                _currentDirection = direction;
+                _position = (_map[coord] == 'T')
+                    ? _teleporters[coord]
+                    : _position = coord;
 
-                    if (_breakerMode && _map[coord.X, coord.Y] == 'X')
-                        _map[coord.X, coord.Y] = ' ';
-
-                    _currentDirection = direction;
-                    break;
-                }
+                if (_map[coord] == 'I') _priorities.Reverse();
+                if (_breakerMode && _map[coord] == 'X') _map[coord] = ' ';
+                break;
             }
 
             _history.Add(_position);
 
-            // Terrible, hacky loop detection
-            var check = string.Join("", _history.Skip(_history.Count() - 30));
-            var allHistory = string.Join("", _history);
-            var erased = allHistory.Replace(check, string.Empty);
-
-            var repeating = erased.Length < (allHistory.Length - check.Length);
-            if (repeating)
+            if (_history.IsRepeating())
             {
                 _looping = true;
                 _currentDirection = "LOOP";
-            };
+            }
 
             return _currentDirection;
         }
-    }
-
-    public override string ToString()
-    {
-        return $"Bender at {_position}, heading {_currentDirection} trying to find {_goal}";
     }
 }
 
@@ -165,10 +136,7 @@ public class Priorities
         return result.ToArray();
     }
 
-    public void Reverse()
-    {
-        _priorities = _priorities.Reverse().ToArray();
-    }
+    public void Reverse() => _priorities = _priorities.Reverse().ToArray();
 }
 
 public class Grid<T>
@@ -183,14 +151,10 @@ public class Grid<T>
     {
         Width = w;
         Height = h;
-
         _data = new T[w, h];
     }
 
-    public Coordinate Single(T value)
-    {
-        return All(value).Single();
-    }
+    public Coordinate Single(T value) => All(value).Single();
 
     public Coordinate[] All(T value)
     {
@@ -207,22 +171,6 @@ public class Grid<T>
         return result.ToArray();
     }
 
-    public string Draw()
-    {
-        var result = new StringBuilder();
-
-        for (int y = 0; y < Height; y++)
-        {
-            for (int x = 0; x < Width; x++)
-            {
-                result.Append(_data[x, y]).ToString();
-            }
-            result.AppendLine();
-        }
-
-        return result.ToString(); ;
-    }
-
     public Grid<T> AddRow(params T[] row)
     {
         for (int x = 0; x < row.Length; x++)
@@ -231,23 +179,17 @@ public class Grid<T>
         return this;
     }
 
-    public T this[int x, int y]
+    public T this[Coordinate coord]
     {
-        get
-        {
-            return _data[x, y];
-        }
-        set
-        {
-            _data[x, y] = value;
-        }
+        get => _data[coord.X, coord.Y];
+        set => _data[coord.X, coord.Y] = value;
     }
 }
 
 public struct Coordinate
 {
-    public int X { get; set; }
-    public int Y { get; set; }
+    public int X { get; }
+    public int Y { get; }
 
     public Coordinate(int x, int y)
     {
@@ -255,20 +197,9 @@ public struct Coordinate
         Y = y;
     }
 
-    public static bool operator ==(Coordinate a, Coordinate b)
-    {
-        return a.X == b.X && a.Y == b.Y;
-    }
-
-    public static bool operator !=(Coordinate a, Coordinate b)
-    {
-        return a.X != b.X || a.Y != b.Y;
-    }
-
-    public override string ToString()
-    {
-        return $"({X},{Y})";
-    }
+    public static bool operator ==(Coordinate a, Coordinate b) => a.X == b.X && a.Y == b.Y;
+    public static bool operator !=(Coordinate a, Coordinate b) => a.X != b.X || a.Y != b.Y;
+    public override string ToString() => $"({X},{Y})";
 }
 
 public static class Extensions
@@ -292,16 +223,40 @@ public static class Extensions
         switch (direction)
         {
             case Directions.SOUTH:
-                return new Coordinate(coord.X, ++coord.Y);
+                return new Coordinate(coord.X, coord.Y + 1);
             case Directions.NORTH:
-                return new Coordinate(coord.X, --coord.Y);
+                return new Coordinate(coord.X, coord.Y - 1);
             case Directions.EAST:
-                return new Coordinate(++coord.X, coord.Y);
+                return new Coordinate(coord.X + 1, coord.Y);
             case Directions.WEST:
-                return new Coordinate(--coord.X, coord.Y);
+                return new Coordinate(coord.X - 1, coord.Y);
             default:
                 throw new Exception("Unexepected direction.");
         }
+    }
+
+    public static Dictionary<Coordinate, Coordinate> AddFrom(this Dictionary<Coordinate, Coordinate> teleporters, Grid<char> map)
+    {
+        var t = map.All('T').ToArray();
+
+        if (t.Count() == 2)
+        {
+            teleporters.Add(t[0], t[1]);
+            teleporters.Add(t[1], t[0]);
+        }
+
+        return teleporters;
+    }
+
+    public static bool IsRepeating(this List<Coordinate> history)
+    {
+        // Terrible, hacky loop detection
+        var check = string.Join("", history.Skip(history.Count() - 30));
+        var allHistory = string.Join("", history);
+        var erased = allHistory.Replace(check, string.Empty);
+
+        var repeating = erased.Length < (allHistory.Length - check.Length);
+        return repeating;
     }
 }
 
@@ -312,8 +267,7 @@ public static class Directions
     public const string NORTH = "NORTH";
     public const string WEST = "WEST";
 
-    public static string FromChar(char @char)
-    {
-        return new[] { NORTH, SOUTH, EAST, WEST }.First(x => x[0] == @char);
-    }
+    private static string[] array = new[] { NORTH, SOUTH, EAST, WEST };
+
+    public static string FromChar(char @char) => array.First(x => x[0] == @char);
 }

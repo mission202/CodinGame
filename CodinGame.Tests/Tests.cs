@@ -174,26 +174,10 @@ namespace CodinGame.Tests
                 .AddRow(0, 1)
                 .AddRow(2, 3);
 
-            Assert.Equal(0, grid[0,0]);
-            Assert.Equal(1, grid[1,0]);
-            Assert.Equal(2, grid[0,1]);
-            Assert.Equal(3, grid[1,1]);
-        }
-
-        [Fact]
-        public void CanDraw()
-        {
-            var grid = new Grid<char>(2, 2)
-                .AddRow('X', 'O')
-                .AddRow('O', 'X');
-
-            var expLines = "XO|OX".Split('|');
-            var result = grid.Draw().Split(new [] { Environment.NewLine }, StringSplitOptions.None);
-
-            for (int i = 0; i < expLines.Length; i++)
-            {
-                Assert.Equal(expLines[i], result[i]);
-            }
+            Assert.Equal(0, grid[new Coordinate(0,0)]);
+            Assert.Equal(1, grid[new Coordinate(1,0)]);
+            Assert.Equal(2, grid[new Coordinate(0,1)]);
+            Assert.Equal(3, grid[new Coordinate(1,1)]);
         }
 
         [Fact]
