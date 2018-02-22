@@ -120,11 +120,10 @@ public class Bender
                     if (_map[coord.X, coord.Y] == 'I')
                         _priorities.Reverse();
 
+                    if (_breakerMode && _map[coord.X, coord.Y] == 'X')
+                        _map[coord.X, coord.Y] = ' ';
 
-                    // TODO: Clear Obstacles Passed in Breaker Mode
-
-                    _currentDirection = direction;
-                    return direction;
+                    return _currentDirection = direction;
                 }
             }
 
