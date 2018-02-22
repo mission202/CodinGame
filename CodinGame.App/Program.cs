@@ -31,17 +31,14 @@ public static class Solution
 
         Console.Error.WriteLine(grid.Draw());
 
-        // Place Bender at the Start @
         var bender = new Bender(grid);
-
-        Console.Error.WriteLine($"{bender}");
 
         // Priorities S, E, N, W (Can be Reversed)
 
         var result = new List<string>();
-
         while (bender.Navigating)
         {
+            Console.Error.WriteLine($"{bender}");
             result.Add(bender.Next);
         }
 
@@ -119,6 +116,22 @@ public class Bender
     }
 }
 
+public class Priorities
+{
+    private char[]  _priorities = new char[] { 'S', 'E', 'N', 'W' };
+
+    public char Next(char current)
+    {
+        var idx = (Array.IndexOf(_priorities, current) + 1) % _priorities.Length;
+        return _priorities[idx];
+    }
+
+    public void Reverse()
+    {
+        _priorities = _priorities.Reverse().ToArray();
+    }
+}
+
 public class Grid<T>
 {
     public int Width { get; private set; }
@@ -170,7 +183,6 @@ public class Grid<T>
     {
         for (int x = 0; x < row.Length; x++)
             _data[x, _currentRow] = row[x];
-
         _currentRow++;
         return this;
     }
@@ -254,6 +266,6 @@ public static class Directions
 
     public static string FromChar(char @char)
     {
-        return new [] { NORTH, SOUTH, EAST, WEST }.First(x => x[0] == @char);
+        return new[] { NORTH, SOUTH, EAST, WEST }.First(x => x[0] == @char);
     }
 }

@@ -20,7 +20,7 @@ namespace CodinGame.Tests
         [Fact]
         public void SmallExample()
         {
-            var input = "6 5|######|#@E $#|# N  #|#X   #|######".Split('|');
+            var input = "5 6|######|#@E $#|# N  #|#X   #|######".Split('|');
             var expected = "SOUTH|EAST|NORTH|EAST|EAST".Split('|');
             Assert.Equal(expected, Solution.Find(input));
         }
@@ -86,6 +86,28 @@ namespace CodinGame.Tests
                 .AddRow(' ', 'X', ' ');
             var bender = new Bender(grid);
             Assert.Equal(Directions.WEST, bender.Next);
+        }
+    }
+
+    public class PriorityTests
+    {
+        [Theory]
+        [InlineData('S', 'E')]
+        [InlineData('W', 'S')]
+        public void CanGetNextPriority(char input, char expected)
+        {
+            var p = new Priorities();
+            Assert.Equal(expected, p.Next(input));
+        }
+
+        [Fact]
+        public void CanReversePriorities()
+        {
+            var p = new Priorities();
+            Assert.Equal('E', p.Next('S')); // Default
+            p.Reverse();
+            Assert.Equal('W', p.Next('S'));
+
         }
     }
 
