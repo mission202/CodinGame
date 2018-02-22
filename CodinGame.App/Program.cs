@@ -32,6 +32,9 @@ public static class Solution
         Console.Error.WriteLine(grid.Draw());
 
         // Place Bender at the Start @
+        var start = grid.Find('@');
+
+        Console.Error.WriteLine($"Bender @ {start}");
 
         // Priorities S, E, N, W (Can be Reversed)
 
@@ -56,6 +59,21 @@ public class Grid<T>
         Height = h;
 
         _data = new T[w, h];
+    }
+
+    public Coordinate Find(T value)
+    {
+        for (int y = 0; y < Height; y++)
+        {
+            for (int x = 0; x < Width; x++)
+            {
+                // Hack due to lack of '==' support for generics.
+                if (_data[x,y].ToString() == value.ToString())
+                    return new Coordinate(x, y);
+            }
+        }
+
+        throw new Exception($"Unable to find '{value.ToString()}.");
     }
 
     public string Draw()
@@ -89,6 +107,23 @@ public class Grid<T>
         {
             return _data[x, y];
         }
+    }
+}
+
+public struct Coordinate
+{
+    public int X { get; set; }
+    public int Y { get; set; }
+
+    public Coordinate(int x, int y)
+    {
+        X = x;
+        Y = y;
+    }
+
+    public override string ToString()
+    {
+        return $"({X},{Y})";
     }
 }
 

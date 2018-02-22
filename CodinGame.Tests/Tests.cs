@@ -64,5 +64,15 @@ namespace CodinGame.Tests
                 Assert.Equal(expLines[i], result[i]);
             }
         }
+
+        [Fact]
+        public void CanFind()
+        {
+            var grid = new Grid<char>(2, 2)
+                .AddRow('X', 'O')
+                .AddRow('O', '@');
+
+            Assert.Equal(new Coordinate(1, 1), grid.Find('@'));
+        }
     }
 }
