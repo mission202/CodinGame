@@ -105,8 +105,10 @@ public class Bender
                     Console.Error.WriteLine($"Moving to {coord}");
                     _position = coord;
 
-                    //if (_map[coord.X, coord.Y] == 'B' && _breakerMode)
-                    //    _map[coord.X, coord.Y] = ' ';
+                    if (_map[coord.X, coord.Y] == 'I')
+                        _priorities.Reverse();
+
+                    // TODO: Clear Obstacles Passed in Breaker Mode
 
                     _currentDirection = direction;
                     return direction;

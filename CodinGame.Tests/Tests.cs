@@ -48,6 +48,14 @@ namespace CodinGame.Tests
             var expected = "SOUTH|SOUTH|SOUTH|SOUTH|EAST|EAST|EAST|EAST|EAST|EAST".Split('|');
             Assert.Equal(expected, Solution.Find(input));
         }
+
+        [Fact]
+        public void InverterMode()
+        {
+            var input = "10 10|##########|#    I   #|#        #|#       $#|#       @#|#        #|#       I#|#        #|#        #|##########".Split('|');
+            var expected = "SOUTH|SOUTH|SOUTH|SOUTH|WEST|WEST|WEST|WEST|WEST|WEST|WEST|NORTH|NORTH|NORTH|NORTH|NORTH|NORTH|NORTH|EAST|EAST|EAST|EAST|EAST|EAST|EAST|SOUTH|SOUTH".Split('|');
+            Assert.Equal(expected, Solution.Find(input));
+        }
     }
 
     public class BenderTests
