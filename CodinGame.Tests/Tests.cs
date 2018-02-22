@@ -72,6 +72,13 @@ namespace CodinGame.Tests
             var expected = "SOUTH|SOUTH|SOUTH|SOUTH|EAST|EAST|EAST|EAST|NORTH|NORTH|WEST|WEST|WEST|WEST|SOUTH|SOUTH|SOUTH|SOUTH|EAST|EAST|EAST|EAST|EAST".Split('|');
             Assert.Equal(expected, Solution.Find(input));
         }
+
+        [Fact]
+        public void Loop()
+        {
+            var input = "15 15|###############|#      IXXXXX #|#  @          #|#E S          #|#             #|#  I          #|#  B          #|#  B   S     W#|#  B   T      #|#             #|#         T   #|#         B   #|#N          W$#|#        XXXX #|###############".Split('|');
+            Assert.Equal("LOOP", Solution.Find(input).Single());
+        }
     }
 
     public class BenderTests

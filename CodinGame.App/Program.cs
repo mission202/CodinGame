@@ -28,16 +28,8 @@ public static class Solution
     {
         var grid = input.ToGrid();
         Console.Error.WriteLine(grid.Draw());
-
         var bender = new Bender(grid);
-
-        var result = new List<string>();
-        while (bender.Navigating)
-        {
-            Console.Error.WriteLine($"{bender}");
-            result.Add(bender.Next);
-        }
-        return result.ToArray();
+        return bender.GetPath();
     }
 }
 
@@ -51,6 +43,8 @@ public class Bender
     private Coordinate _position;
     private string _currentDirection;
     private bool _breakerMode = false;
+    private List<Coordinate> _history = new List<Coordinate>();
+    private bool _looping = false;
 
     public Bender(Grid<char> map)
     {
@@ -67,17 +61,9 @@ public class Bender
             _teleporters.Add(teleporters[0], teleporters[1]);
             _teleporters.Add(teleporters[1], teleporters[0]);
         }
-
     }
 
-    public bool Navigating
-    {
-        get
-        {
-            Console.Error.WriteLine($"Navigating: {_position} {_goal}");
-            return _position != _goal;
-        }
-    }
+    private bool Navigating => !_looping && _position != _goal;
 
     public bool CanMove(Coordinate coordinate)
     {
@@ -87,6 +73,18 @@ public class Bender
         if (value == 'X') return _breakerMode;
 
         return true;
+    }
+
+    public string[] GetPath()
+    {
+        var result = new List<string>();
+        while (Navigating)
+        {
+            var n = Next;
+            if (n == "LOOP") return new[] { "LOOP" };
+            result.Add(n);
+        }
+        return result.ToArray();
     }
 
     public string Next
@@ -110,7 +108,6 @@ public class Bender
             {
                 // Clear? GO!
                 var coord = _position.Move(direction);
-                Console.Error.WriteLine($"Checking {coord} going {direction}");
                 if (CanMove(coord))
                 {
                     _position = (_map[coord.X, coord.Y] == 'T')
@@ -123,14 +120,28 @@ public class Bender
                     if (_breakerMode && _map[coord.X, coord.Y] == 'X')
                         _map[coord.X, coord.Y] = ' ';
 
-                    return _currentDirection = direction;
+                    _currentDirection = direction;
+                    break;
                 }
             }
 
-            // Still here? We're stuck!
-            return "LOOP";
+            _history.Add(_position);
 
-            // TODO: Detect Actual Loop
+            // Terrible, hacky loop detection
+
+            var check = string.Join("", _history.Skip(_history.Count() - 10));
+            var allHistory = string.Join("", _history);
+            var erased = allHistory.Replace(check, string.Empty);
+            Console.Error.WriteLine($"allHistory LEN: {allHistory.Length}. Erased LEN: {erased.Length}. Repeating? {(erased.Length < (allHistory.Length - check.Length))}");
+
+            var repeating = erased.Length < (allHistory.Length - check.Length);
+            if (repeating)
+            {
+                _looping = true;
+                _currentDirection = "LOOP";
+            };
+
+            return _currentDirection;
         }
     }
 
