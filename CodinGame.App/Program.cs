@@ -31,10 +31,7 @@ public static class Solution
         Console.WriteLine(string.Join(Environment.NewLine, Find(input)));
     }
 
-    public static IEnumerable<string> Find(IEnumerable<string> input)
-    {
-        return new Bender(input.ToGrid()).GetPath();
-    }
+    public static IEnumerable<string> Find(IEnumerable<string> input) => new Bender(input.ToGrid()).GetPath();
 }
 
 public class Bender
@@ -64,10 +61,8 @@ public class Bender
     public bool CanMove(Coordinate coordinate)
     {
         var value = _map[coordinate];
-
         if (value == '#') return false;
         if (value == 'X') return _breakerMode;
-
         return true;
     }
 
@@ -141,16 +136,14 @@ public class Priorities
 
 public class Grid<T>
 {
-    public int Width { get; private set; }
-    public int Height { get; private set; }
+    public int Width => _data.GetLength(0);
+    public int Height => _data.GetLength(1);
 
     private T[,] _data;
     private int _currentRow = 0;
 
     public Grid(int w, int h)
     {
-        Width = w;
-        Height = h;
         _data = new T[w, h];
     }
 
