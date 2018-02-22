@@ -46,6 +46,7 @@ public class Bender
     private readonly Coordinate _goal;
     private readonly Grid<char> _map;
     private readonly Priorities _priorities = new Priorities();
+    private readonly Dictionary<Coordinate, Coordinate> _teleporters = new Dictionary<Coordinate, Coordinate>();
 
     private Coordinate _position;
     private string _currentDirection;
@@ -53,10 +54,20 @@ public class Bender
 
     public Bender(Grid<char> map)
     {
-        _goal = map.Find('$');
+        _goal = map.Single('$');
         _map = map;
         _currentDirection = Directions.SOUTH;
-        _position = map.Find('@');
+        _position = map.Single('@');
+
+        var teleporters = _map.All('T').ToArray();
+
+        if (teleporters.Count() == 2)
+        {
+            Console.Error.WriteLine($"Teleporters on Map @ {string.Join(" - ", teleporters)}");
+            _teleporters.Add(teleporters[0], teleporters[1]);
+            _teleporters.Add(teleporters[1], teleporters[0]);
+        }
+
     }
 
     public bool Navigating
@@ -102,11 +113,13 @@ public class Bender
                 Console.Error.WriteLine($"Checking {coord} going {direction}");
                 if (CanMove(coord))
                 {
-                    Console.Error.WriteLine($"Moving to {coord}");
-                    _position = coord;
+                    _position = (_map[coord.X, coord.Y] == 'T')
+                        ? _teleporters[coord]
+                        : _position = coord;
 
                     if (_map[coord.X, coord.Y] == 'I')
                         _priorities.Reverse();
+
 
                     // TODO: Clear Obstacles Passed in Breaker Mode
 
@@ -164,19 +177,24 @@ public class Grid<T>
         _data = new T[w, h];
     }
 
-    public Coordinate Find(T value)
+    public Coordinate Single(T value)
     {
+        return All(value).Single();
+    }
+
+    public Coordinate[] All(T value)
+    {
+        var result = new List<Coordinate>();
         for (int y = 0; y < Height; y++)
         {
             for (int x = 0; x < Width; x++)
             {
                 // Hack due to lack of '==' support for generics.
                 if (_data[x, y].ToString() == value.ToString())
-                    return new Coordinate(x, y);
+                    result.Add(new Coordinate(x, y));
             }
         }
-
-        throw new Exception($"Unable to find '{value.ToString()}'.");
+        return result.ToArray();
     }
 
     public string Draw()
@@ -208,7 +226,8 @@ public class Grid<T>
         get
         {
             return _data[x, y];
-        } set
+        }
+        set
         {
             _data[x, y] = value;
         }

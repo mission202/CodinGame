@@ -56,6 +56,14 @@ namespace CodinGame.Tests
             var expected = "SOUTH|SOUTH|SOUTH|SOUTH|WEST|WEST|WEST|WEST|WEST|WEST|WEST|NORTH|NORTH|NORTH|NORTH|NORTH|NORTH|NORTH|EAST|EAST|EAST|EAST|EAST|EAST|EAST|SOUTH|SOUTH".Split('|');
             Assert.Equal(expected, Solution.Find(input));
         }
+
+        [Fact]
+        public void Teleport()
+        {
+            var input = "10 10|##########|#    T   #|#        #|#        #|#        #|#@       #|#        #|#        #|#    T  $#|##########".Split('|');
+            var expected = "SOUTH|SOUTH|SOUTH|EAST|EAST|EAST|EAST|EAST|EAST|EAST|SOUTH|SOUTH|SOUTH|SOUTH|SOUTH|SOUTH|SOUTH".Split('|');
+            Assert.Equal(expected, Solution.Find(input));
+        }
     }
 
     public class BenderTests
@@ -167,13 +175,24 @@ namespace CodinGame.Tests
         }
 
         [Fact]
-        public void CanFind()
+        public void CanFindSingle()
         {
             var grid = new Grid<char>(2, 2)
                 .AddRow('X', 'O')
                 .AddRow('O', '@');
 
-            Assert.Equal(new Coordinate(1, 1), grid.Find('@'));
+            Assert.Equal(new Coordinate(1, 1), grid.Single('@'));
+        }
+
+        [Fact]
+        public void CanFindAll()
+        {
+            var grid = new Grid<char>(2, 2)
+                .AddRow('X', 'T')
+                .AddRow('T', '@');
+
+            Assert.Contains(new Coordinate(1, 0), grid.All('T'));
+            Assert.Contains(new Coordinate(0, 1), grid.All('T'));
         }
     }
 }
