@@ -21,7 +21,7 @@ public static class Solution
         for (int i = 0; i < int.Parse(dimensions[0]); i++)
             readLine();
 
-        Console.WriteLine(Find(input));
+        Console.WriteLine(string.Join(Environment.NewLine, Find(input)));
     }
 
     public static IEnumerable<string> Find(IEnumerable<string> input)
