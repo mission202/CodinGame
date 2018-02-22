@@ -86,22 +86,36 @@ public class Bender
                 Console.Error.WriteLine($"Current direction changed to '{_currentDirection}' due to tile '{_map[_position.X, _position.Y]}'");
             }
 
+            // Check Current Direction then cycle priorities
             var checking = _currentDirection;
-            for (int i = 0; i < _priorities.Length; i++)
+            var next = _position.Move(checking);
+
+            if (CanMove(next))
             {
-                // Clear? GO!
-                var coord = _position.Move(checking);
-                Console.Error.WriteLine($"Checking {coord} going {checking}");
-                if (CanMove(coord))
+                Console.Error.WriteLine($"Moving to {next}");
+                _position = next;
+                _currentDirection = checking;
+                return checking;
+            }
+            else
+            {
+                checking = Directions.SOUTH;
+                for (int i = 0; i < _priorities.Length; i++)
                 {
-                    Console.Error.WriteLine($"Moving to {coord}");
-                    _position = coord;
-                    _currentDirection = checking;
-                    return checking;
-                }
-                else
-                {
-                    checking = _priorities.Next(checking);
+                    // Clear? GO!
+                    var coord = _position.Move(checking);
+                    Console.Error.WriteLine($"Checking {coord} going {checking}");
+                    if (CanMove(coord))
+                    {
+                        Console.Error.WriteLine($"Moving to {coord}");
+                        _position = coord;
+                        _currentDirection = checking;
+                        return checking;
+                    }
+                    else
+                    {
+                        checking = _priorities.Next(checking);
+                    }
                 }
             }
 
