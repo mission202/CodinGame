@@ -49,6 +49,7 @@ public class Bender
 
     private Coordinate _position;
     private string _currentDirection;
+    private bool _breakerMode = false;
 
     public Bender(Grid<char> map)
     {
@@ -69,8 +70,10 @@ public class Bender
 
     public bool CanMove(Coordinate coordinate)
     {
-        if (new[] { '#', 'X' }.Contains(_map[coordinate.X, coordinate.Y]))
-            return false;
+        var value = _map[coordinate.X, coordinate.Y];
+
+        if (value == '#') return false;
+        if (value == 'X') return _breakerMode;
 
         return true;
     }
@@ -86,6 +89,9 @@ public class Bender
                 Console.Error.WriteLine($"Current direction changed to '{_currentDirection}' due to tile '{_map[_position.X, _position.Y]}'");
             }
 
+            if (_map[_position.X, _position.Y] == 'B')
+                _breakerMode = !_breakerMode;
+
             // Check Current Direction then cycle priorities
             var toCheck = _priorities.Next(_currentDirection);
 
@@ -98,6 +104,10 @@ public class Bender
                 {
                     Console.Error.WriteLine($"Moving to {coord}");
                     _position = coord;
+
+                    //if (_map[coord.X, coord.Y] == 'B' && _breakerMode)
+                    //    _map[coord.X, coord.Y] = ' ';
+
                     _currentDirection = direction;
                     return direction;
                 }
@@ -196,6 +206,9 @@ public class Grid<T>
         get
         {
             return _data[x, y];
+        } set
+        {
+            _data[x, y] = value;
         }
     }
 }
