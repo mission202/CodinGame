@@ -25,4 +25,20 @@ namespace CodinGame.Tests
             Assert.Equal(expected, Solution.Find(input));
         }
     }
+
+    public class GridTests
+    {
+        [Fact]
+        public void CreatesGrid()
+        {
+            var grid = new Grid<int>(2, 2)
+                .AddRow(0, 1)
+                .AddRow(2, 3);
+
+            Assert.Equal(0, grid[0,0]);
+            Assert.Equal(1, grid[1,0]);
+            Assert.Equal(2, grid[0,1]);
+            Assert.Equal(3, grid[1,1]);
+        }
+    }
 }
