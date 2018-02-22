@@ -5,6 +5,11 @@ using System.Text;
 using System.Collections;
 using System.Collections.Generic;
 
+/*
+ * I AM ONLY SUBMITTING THIS TO CHECK SCORE, IT STILL NEEDS REFACTORING.
+ * I AM NOT RESPONSIBLE FOR BLEEDING EYES/LOSS OF WILL TO LIVE UPON READING.
+ */
+
 public static class Solution
 {
     static void Main(string[] args)
@@ -27,7 +32,6 @@ public static class Solution
     public static IEnumerable<string> Find(IEnumerable<string> input)
     {
         var grid = input.ToGrid();
-        Console.Error.WriteLine(grid.Draw());
         var bender = new Bender(grid);
         return bender.GetPath();
     }
@@ -57,7 +61,6 @@ public class Bender
 
         if (teleporters.Count() == 2)
         {
-            Console.Error.WriteLine($"Teleporters on Map @ {string.Join(" - ", teleporters)}");
             _teleporters.Add(teleporters[0], teleporters[1]);
             _teleporters.Add(teleporters[1], teleporters[0]);
         }
@@ -93,10 +96,7 @@ public class Bender
         {
             // Move if Directed by Square
             if (new[] { 'N', 'S', 'E', 'W' }.Contains(_map[_position.X, _position.Y]))
-            {
                 _currentDirection = Directions.FromChar(_map[_position.X, _position.Y]);
-                Console.Error.WriteLine($"Current direction changed to '{_currentDirection}' due to tile '{_map[_position.X, _position.Y]}'");
-            }
 
             if (_map[_position.X, _position.Y] == 'B')
                 _breakerMode = !_breakerMode;
@@ -128,11 +128,9 @@ public class Bender
             _history.Add(_position);
 
             // Terrible, hacky loop detection
-
-            var check = string.Join("", _history.Skip(_history.Count() - 10));
+            var check = string.Join("", _history.Skip(_history.Count() - 30));
             var allHistory = string.Join("", _history);
             var erased = allHistory.Replace(check, string.Empty);
-            Console.Error.WriteLine($"allHistory LEN: {allHistory.Length}. Erased LEN: {erased.Length}. Repeating? {(erased.Length < (allHistory.Length - check.Length))}");
 
             var repeating = erased.Length < (allHistory.Length - check.Length);
             if (repeating)
