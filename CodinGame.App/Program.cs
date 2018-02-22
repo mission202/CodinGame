@@ -87,35 +87,19 @@ public class Bender
             }
 
             // Check Current Direction then cycle priorities
-            var checking = _currentDirection;
-            var next = _position.Move(checking);
+            var toCheck = _priorities.Next(_currentDirection);
 
-            if (CanMove(next))
+            foreach (var direction in toCheck)
             {
-                Console.Error.WriteLine($"Moving to {next}");
-                _position = next;
-                _currentDirection = checking;
-                return checking;
-            }
-            else
-            {
-                checking = Directions.SOUTH;
-                for (int i = 0; i < _priorities.Length; i++)
+                // Clear? GO!
+                var coord = _position.Move(direction);
+                Console.Error.WriteLine($"Checking {coord} going {direction}");
+                if (CanMove(coord))
                 {
-                    // Clear? GO!
-                    var coord = _position.Move(checking);
-                    Console.Error.WriteLine($"Checking {coord} going {checking}");
-                    if (CanMove(coord))
-                    {
-                        Console.Error.WriteLine($"Moving to {coord}");
-                        _position = coord;
-                        _currentDirection = checking;
-                        return checking;
-                    }
-                    else
-                    {
-                        checking = _priorities.Next(checking);
-                    }
+                    Console.Error.WriteLine($"Moving to {coord}");
+                    _position = coord;
+                    _currentDirection = direction;
+                    return direction;
                 }
             }
 
@@ -138,9 +122,12 @@ public class Priorities
 
     public int Length => _priorities.Length;
 
-    public string Next(string current)
+    public string[] Next(string current)
     {
-        return _priorities[(Array.IndexOf(_priorities, current) + 1) % _priorities.Length];
+        var result = new List<string>(_priorities);
+        if (current != _priorities[0])
+            result.Insert(0, current);
+        return result.ToArray();
     }
 
     public void Reverse()

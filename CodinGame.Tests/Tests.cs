@@ -91,22 +91,30 @@ namespace CodinGame.Tests
 
     public class PriorityTests
     {
-        [Theory]
-        [InlineData(Directions.SOUTH, Directions.EAST)]
-        [InlineData(Directions.WEST, Directions.SOUTH)]
-        public void CanGetNextPriority(string input, string expected)
+        [Fact]
+        public void CanGetPrioritySequence()
         {
-            var p = new Priorities();
-            Assert.Equal(expected, p.Next(input));
+            Assert.Equal(
+                new[] { Directions.EAST, Directions.SOUTH, Directions.EAST, Directions.NORTH, Directions.WEST },
+                new Priorities().Next(Directions.EAST));
+        }
+
+        [Fact]
+        public void DoesntDuplicateSouth()
+        {
+            Assert.Equal(
+                new[] { Directions.SOUTH, Directions.EAST, Directions.NORTH, Directions.WEST },
+                new Priorities().Next(Directions.SOUTH));
         }
 
         [Fact]
         public void CanReversePriorities()
         {
             var p = new Priorities();
-            Assert.Equal(Directions.EAST, p.Next(Directions.SOUTH)); // Default
+            Console.Error.WriteLine($"{string.Join(", ", p.Next(Directions.SOUTH))}");
+            Assert.Equal(Directions.EAST, p.Next(Directions.SOUTH).Skip(1).First()); // Default
             p.Reverse();
-            Assert.Equal(Directions.WEST, p.Next(Directions.SOUTH));
+            Assert.Equal(Directions.WEST, p.Next(Directions.SOUTH).Skip(1).First());
 
         }
     }
