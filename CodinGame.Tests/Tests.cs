@@ -14,5 +14,11 @@ namespace CodinGame.Tests
         {
             Assert.True(true);
         }
+
+        [Fact]
+        public void CanPrioritiseSampleData()
+        {
+            ca
+        }
     }
 }
