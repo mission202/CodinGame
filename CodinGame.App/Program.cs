@@ -40,12 +40,7 @@ public class Game
             for (int i = 0; i < sampleCount; i++)
             {
                 var input = Console.ReadLine();
-                Console.Error.WriteLine($"S {i} - {input}");
-                var sample = new SampleDataFile(input);
-                Console.Error.WriteLine($"Parsed {sample.Cost}");
-
-                samples.Add(sample);
-                //Console.Error.WriteLine($"Sample {sample.Id}: {sample.Cost}");
+                samples.Add(new SampleDataFile(input));
             }
 
             var ai = new AI(samples, player);
@@ -70,7 +65,7 @@ public class AI
 
     public string GetNextAction()
     {
-        // No Sample Data Files? Go to DIAGNOSIS
+        // No Sample Data Files? Go to SAMPLES
         var heldByPlayer = Samples.Where(x => x.CarriedByPlayer).ToList();
 
         // We've done grunt work - research away!
@@ -82,12 +77,14 @@ public class AI
 
         if (heldByPlayer.Count() == 0)
         {
-            if (Player.Target != Modules.DIAGNOSIS) return $"GOTO {Modules.DIAGNOSIS}";
+            if (Player.Target != Modules.SAMPLES) return $"GOTO {Modules.SAMPLES}";
 
-            // Connect and Get Best Sample
-            var bestSample = Samples.Where(x => x.InCloud).OrderByDescending(x => x.Health).First();
-            return $"CONNECT {bestSample.Id}";
+            // Connect and Get Best Sample / "Best" TBC
+            var rank = 3; // 1 = Cheaper/Less Health
+            return $"CONNECT {rank}";
         }
+
+        // Got Files? Need to Get Molecule Requirements from DIAGNOSIS.
 
         // Got Files, Need Molecules? Go to MOLECULES
         if (heldByPlayer.Count() > 0)
@@ -103,8 +100,6 @@ public class AI
             if (Player.Storage.C < shoppingFor.Cost.C) return "CONNECT C";
             if (Player.Storage.D < shoppingFor.Cost.D) return "CONNECT D";
             if (Player.Storage.E < shoppingFor.Cost.E) return "CONNECT E";
-
-            Console.Error.WriteLine($"Shopping: {shoppingFor.Id} {shoppingFor.Cost} | Storage: {Player.Storage}");
 
             // Got Molecules? Go to LABORATORY
             return $"GOTO {Modules.LABORATORY}";
@@ -166,6 +161,7 @@ public class SampleDataFile
     public bool CarriedByPlayer => CarriedBy == 0;
     public bool CarriedByOpponent => CarriedBy == 1;
     public bool InCloud => CarriedBy == -1;
+    public string State = States.UNDIAGNOSED;
 
     public int Rank { get; private set; }
     public string Gain { get; private set; }
@@ -187,7 +183,14 @@ public class SampleDataFile
 
 public static class Modules
 {
+    public const string SAMPLES = "SAMPLES";
     public const string DIAGNOSIS = "DIAGNOSIS";
     public const string MOLECULES = "MOLECULES";
     public const string LABORATORY = "LABORATORY";
+}
+
+public static class States
+{
+    public const string UNDIAGNOSED = "undiagnosed";
+    public const string DIAGNOSED = "diagnosed";
 }
