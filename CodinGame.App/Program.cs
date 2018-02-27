@@ -27,7 +27,6 @@ public class Game
 
             Console.Error.WriteLine("Game State:");
             Console.Error.WriteLine(game.Serialise);
-
             Console.WriteLine(game.GetNextAction());
         }
     }
@@ -52,7 +51,7 @@ public class Game
 
     public Game(string state) : this()
     {
-        var turnAndAI = state.Split(new [] { "//" }, StringSplitOptions.None);
+        var turnAndAI = state.Split(new[] { "//" }, StringSplitOptions.None);
         Setup(turnAndAI[0]);
         _ai = new AI(turnAndAI[1]);
     }
@@ -217,6 +216,7 @@ public class AI
             Console.Error.WriteLine("== SHOPPING! ==");
             foreach (var held in heldByPlayer)
                 Console.Error.WriteLine($"// {held.Value.Id}: {held.Value.Cost} ({held.Value.Health})");
+            Console.Error.WriteLine($"// Storage: {player.Storage}");
             Console.Error.WriteLine($"// Available: {available}");
 
             // TODO: Make Selection of Molecules Smarter (e.g. Availability of Modules/Expertise)
@@ -244,14 +244,20 @@ public class AI
                 Console.Error.WriteLine($"// {held.Value.Id}: {held.Value.Cost} ({held.Value.Health})");
             Console.Error.WriteLine($"// Storage: {player.Storage}");
 
-            var first = heldByPlayer
+            var researching = heldByPlayer
                 .Where(x => IsUnresearched(x))
                 .Where(x => player.Storage.Covers(x.Value.Cost, player.Storage))
                 .OrderByDescending(x => x.Value.Health)
-                .First().Value;
+                .ToList();
 
-            _researched.Add(first.Id);
-            return $"CONNECT {first.Id}";
+            if (researching.Count == 0) {
+                return (heldByPlayer.Count == 0)
+                    ? Travel(player.Target, Modules.SAMPLES)
+                    : Travel(player.Target, Modules.MOLECULES);
+            }
+
+            _researched.Add(researching.First().Value.Id);
+            return $"CONNECT {researching.First().Value.Id}";
         }
 
         // Shouldn't really get here.

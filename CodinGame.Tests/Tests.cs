@@ -76,12 +76,22 @@ namespace CodinGame.Tests
             Assert.Equal(Actions.Connect('E'), game.GetNextAction());
         }
 
-        // TODO: Fixup 'Researched' Tracking
-        // TODO: State needs to be much shorter :) Get's truncated by CG
         [Fact]
-        public void ResearchesMostValuableAvailableSample()
+        public void CollectsMoreMoleculesIfRunOutWhileResearching()
         {
-            //var game = new Game("START_POS 0 0 0 0 0 0 0 0 0 0 0 0|START_POS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 1 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 1 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|2|0 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|4|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 2 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 2 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 1 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 1 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 A 1 0 3 0 0 0,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 B 1 1 0 1 2 1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 B 1 1 0 1 2 1,4 0 1 E 10 0 4 0 0 0,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 B 1 0 0 2 0 2/MOLECULES 2 0 0 0 0 0 0 0 0 0 0 0|MOLECULES 2 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 B 1 1 0 1 2 1,4 0 1 E 10 0 4 0 0 0,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 B 1 0 0 2 0 2/MOLECULES 1 0 0 0 0 0 0 0 0 0 0 0|MOLECULES 1 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 B 1 1 0 1 2 1,4 0 1 E 10 0 4 0 0 0,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 B 1 0 0 2 0 2/MOLECULES 0 0 0 0 0 0 0 0 0 0 0 0|MOLECULES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 B 1 1 0 1 2 1,4 0 1 E 10 0 4 0 0 0,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 B 1 0 0 2 0 2/MOLECULES 0 0 0 1 0 0 0 0 0 0 0 0|MOLECULES 0 0 0 1 0 0 0 0 0 0 0 0|5 3 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 B 1 1 0 1 2 1,4 0 1 E 10 0 4 0 0 0,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 B 1 0 0 2 0 2/MOLECULES 0 0 0 2 0 0 0 0 0 0 0 0|MOLECULES 0 0 0 2 0 0 0 0 0 0 0 0|5 1 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 B 1 1 0 1 2 1,4 0 1 E 10 0 4 0 0 0,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 B 1 0 0 2 0 2/MOLECULES 0 0 1 2 0 0 0 0 0 0 0 0|MOLECULES 0 0 0 3 0 0 0 0 0 0 0 0|4 0 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 B 1 1 0 1 2 1,4 0 1 E 10 0 4 0 0 0,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 B 1 0 0 2 0 2/MOLECULES 0 0 2 2 0 0 0 0 0 0 0 0|LABORATORY 2 0 0 3 0 0 0 0 0 0 0 0|3 0 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 B 1 1 0 1 2 1,4 0 1 E 10 0 4 0 0 0,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 B 1 0 0 2 0 2/MOLECULES 0 0 3 2 0 0 0 0 0 0 0 0|LABORATORY 1 0 0 3 0 0 0 0 0 0 0 0|2 0 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 B 1 1 0 1 2 1,4 0 1 E 10 0 4 0 0 0,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 B 1 0 0 2 0 2/LABORATORY 2 0 3 2 0 0 0 0 0 0 0 0|LABORATORY 0 0 0 3 0 0 0 0 0 0 0 0|2 0 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 B 1 1 0 1 2 1,4 0 1 E 10 0 4 0 0 0,1 1 1 A 1 0 3 0 0 0...")
+            // 0: AACEE (1)
+            // 2: AABCE (1)
+            // Storage:
+            var game = new Game("LABORATORY 0 10 0 0 0 0 0 0 0 1 0 0|LABORATORY 2 0 1 2 2 1 1 0 0 0 0 0|4 3 3 4 4|5|0 0 1 D 1 2 0 1 0 2|2 0 1 D 1 2 1 1 0 1|1 1 1 D 1 1 0 0 1 3|3 1 1 B 1 0 0 0 0 3|5 1 1 A 1 0 2 2 0 1//0,2,4|4|");
+            Assert.Equal(Goto.Molecules, game.GetNextAction());
+        }
+
+        [Fact]
+        public void ReturnsToSamplesIfOutOfEverything()
+        {
+            // Storage: C
+            var game = new Game("LABORATORY 0 12 0 0 1 0 0 0 0 1 2 0|LABORATORY 0 3 1 0 0 0 0 1 1 0 1 0|4 5 4 5 5|0|//0,2,4|4,0,2|");
+            Assert.Equal(Goto.Samples, game.GetNextAction());
         }
 
         [Fact]
@@ -95,5 +105,9 @@ namespace CodinGame.Tests
             var deserialised = new Game(serialised);
             Assert.Equal(Modules.START_POS, deserialised.Player.Target);
         }
+
+        // TODO: Fixup 'Researched' Tracking
+
+        // TODO: Handle Expertise - Reduces Cost!
     }
 }
