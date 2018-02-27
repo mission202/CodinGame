@@ -5,103 +5,87 @@ using System.Text;
 using System.Collections;
 using System.Collections.Generic;
 
-public class Game
+public class Solution
 {
     static void Main(string[] args)
     {
-        string[] inputs;
-        int projectCount = int.Parse(Console.ReadLine());
-        for (int i = 0; i < projectCount; i++)
-        {
-            inputs = Console.ReadLine().Split(' ');
-            var project = new MoleculeCollection(inputs.Select(int.Parse).ToArray());
-            Console.Error.WriteLine($"Project: {project}");
-        }
-
-        var game = new Game();
-
-        // game loop
+        var game = new Game(Console.ReadLine);
         while (true)
         {
-            game.Setup(Console.ReadLine);
-
+            game.ProcessTurn();
             Console.Error.WriteLine("Game State:");
             Console.Error.WriteLine(game.Serialise);
             Console.WriteLine(game.GetNextAction());
         }
     }
+}
+public class Game
+{
 
     public const int MAX_SAMPLES = 3;
     public const int MAX_MOLECULES = 10;
 
-    public Player Player { get; private set; }
-
+    private readonly Func<string> _inputSource;
+    private MoleculeCollection[] _projects;
+    private Player _player;
     private Player _opponent;
     private MoleculeCollection _available;
-    private Dictionary<int, SampleDataFile> _samples;
-    private readonly AI _ai;
+    private Dictionary<int, SampleDataFile> _samples = new Dictionary<int, SampleDataFile>();
+    private readonly AI _ai = new AI();
 
     private string _lastUpdate = string.Empty;
 
-    public Game()
+    public Game(Func<string> inputSource)
     {
-        _samples = new Dictionary<int, SampleDataFile>();
-        _ai = new AI();
+        _inputSource = inputSource;
+        LoadProjects();
     }
 
-    public Game(string state) : this()
+    public Game(string state)
     {
-        var turnAndAI = state.Split(new[] { "//" }, StringSplitOptions.None);
-        Setup(turnAndAI[0]);
-        _ai = new AI(turnAndAI[1]);
+        var inputAndAi = state.Split(new[] { "//" }, StringSplitOptions.None);
+        _ai = new AI(inputAndAi[1]);
+        var input = new Queue<string>(inputAndAi[0].Split('|'));
+        _inputSource = input.Dequeue;
+        LoadProjects();
+        ProcessTurn();
+
     }
 
-    public void Setup(Func<string> inputSource)
+    public void ProcessTurn()
     {
-        var player = inputSource();
-        var opponent = inputSource();
-        var molecules = inputSource();
-        var sampleCount = inputSource();
+        var player = _inputSource();
+        var opponent = _inputSource();
+        var molecules = _inputSource();
+        var sampleCount = _inputSource();
 
-        SetPlayer(player);
-        SetOpponent(opponent);
-        SetAvailableMolecules(molecules);
-        var samples = Enumerable.Range(0, int.Parse(sampleCount)).Select(i => inputSource()).ToList();
+        _player = new Player(player);
+        _opponent = new Player(opponent);
+        _available = new MoleculeCollection(molecules.Split(' ').Select(int.Parse).ToArray());
+        var samples = Enumerable.Range(0, int.Parse(sampleCount)).Select(i => _inputSource()).ToList();
         samples.ForEach(s => UpdateSample(s));
 
         _lastUpdate = $"{player}|{opponent}|{molecules}|{sampleCount}|{string.Join("|", samples)}";
     }
 
-    public void Setup(string input)
-    {
-        var buffer = new Queue<string>(input.Split('|'));
-        Setup(buffer.Dequeue);
-    }
-
-    public Game SetPlayer(string input)
-    {
-        Player = new Player(input);
-        return this;
-    }
-
-    public Game SetOpponent(string input)
-    {
-        _opponent = new Player(input);
-        return this;
-    }
-
-    public Game SetAvailableMolecules(string values)
-    {
-        _available = new MoleculeCollection(values.Split(' ').Select(int.Parse).ToArray());
-        return this;
-    }
-
     public string GetNextAction()
     {
-        return _ai.GetNextAction(_samples, Player, _available);
+        return _ai.GetNextAction(_projects, _samples, _player, _available);
     }
 
-    public void UpdateSample(string input)
+    private void LoadProjects()
+    {
+        int projectCount = int.Parse(_inputSource());
+        _projects = new MoleculeCollection[projectCount];
+        for (int i = 0; i < projectCount; i++)
+        {
+            var project = new MoleculeCollection(_inputSource().Split(' ').Select(int.Parse).ToArray());
+            Console.Error.WriteLine($"Project: {project}");
+            _projects[i] = project;
+        }
+    }
+
+    private void UpdateSample(string input)
     {
         var data = new SampleDataFile(input);
         if (_samples.ContainsKey(data.Id))
@@ -110,7 +94,17 @@ public class Game
             _samples.Add(data.Id, data);
     }
 
-    public string Serialise => $"{_lastUpdate}//{_ai.Serialise}";
+    public string Serialise
+    {
+        get
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine(_projects.Count().ToString());
+            foreach (var p in _projects)
+                sb.AppendLine(p.ToString());
+            return $"{string.Join("|", sb.ToString().Split(new[] {'\n'}, StringSplitOptions.RemoveEmptyEntries))}//{_lastUpdate}//{_ai.Serialise}";
+        }
+    }
 }
 
 public class AI
@@ -165,7 +159,7 @@ public class AI
             : new Queue<string>(split[2].Split(','));
     }
 
-    public string GetNextAction(Dictionary<int, SampleDataFile> samples, Player player, MoleculeCollection available)
+    public string GetNextAction(MoleculeCollection[] projects, Dictionary<int, SampleDataFile> samples, Player player, MoleculeCollection available)
     {
         // Clear Queue (if any)
         if (_queue.Count > 0)
@@ -254,7 +248,8 @@ public class AI
                 .OrderByDescending(x => x.Value.Health)
                 .ToList();
 
-            if (researching.Count == 0) {
+            if (researching.Count == 0)
+            {
                 return (heldByPlayer.Count == 0)
                     ? Travel(player.Target, Modules.SAMPLES)
                     : Travel(player.Target, Modules.MOLECULES);
