@@ -64,6 +64,8 @@ public class Game
 
             if (int.Parse(split[3]) > 0)
                 split[4].Split(',').ToList().ForEach(s => UpdateSample(s));
+
+            Console.Error.WriteLine($"Played: {GetNextAction()}");
         }
     }
 
@@ -106,7 +108,7 @@ public class Game
 
     public string GetNextAction()
     {
-        return _ai.GetNextAction(_samples, Player);
+        return _ai.GetNextAction(_samples, Player, _available);
     }
 
     public void UpdateSample(string input)
@@ -157,7 +159,7 @@ public class AI
         { $"{Modules.LABORATORY}>{Modules.LABORATORY}", 0 }
     };
 
-    public string GetNextAction(Dictionary<int, SampleDataFile> samples, Player player)
+    public string GetNextAction(Dictionary<int, SampleDataFile> samples, Player player, MoleculeCollection available)
     {
         // Clear Queue (if any)
         if (_queue.Count > 0)
@@ -168,16 +170,6 @@ public class AI
 
         // No Sample Data Files? Go to SAMPLES
         var heldByPlayer = samples.Where(x => x.Value.CarriedByPlayer && !_researched.Contains(x.Value.Id)).ToList();
-
-        //if (heldByPlayer.Count() == 0)
-        //{
-        //    if (player.Target != Modules.SAMPLES)
-        //        return Travel(player.Target, Modules.SAMPLES);
-
-        //    // Connect and Get Best Sample / "Best" TBC
-        //    var rank = 2; // 1 = Cheaper/Less Health, 3 = Expensive, More Health
-        //    return $"CONNECT {rank}";
-        //}
 
         if (player.Target == Modules.SAMPLES)
         {
@@ -197,61 +189,67 @@ public class AI
         if (player.Target == Modules.DIAGNOSIS)
         {
             var toDiagnose = heldByPlayer
-                .Where(x => IsUndiagnosed(x.Value)).ToList();
+                .Where(x => IsUndiagnosed(x)).ToList();
 
             if (toDiagnose.Any())
             {
-                toDiagnose.ForEach(sample => _queue.Enqueue(Actions.Connect(sample.Value.Id)));
+                toDiagnose.ForEach(sample =>
+                {
+                    _diagnosed.Add(sample.Value.Id);
+                    _queue.Enqueue(Actions.Connect(sample.Value.Id));
+                });
+
                 return _queue.Dequeue();
             }
 
             return Travel(player.Target, Modules.MOLECULES);
         }
 
-        // Got Files? Need to Get Molecule Requirements from DIAGNOSIS.
-        if (heldByPlayer.Count() > 0)
+        if (player.Target == Modules.MOLECULES)
         {
-            var first = heldByPlayer.OrderByDescending(x => x.Value.Health).First().Value;
-            Console.Error.WriteLine($"Holding {first.Id} - {first.Health}pts");
+            Console.Error.WriteLine("== SHOPPING! ==");
+            foreach (var held in heldByPlayer)
+                Console.Error.WriteLine($"// {held.Value.Id}: {held.Value.Cost} ({held.Value.Health})");
+            Console.Error.WriteLine($"// Available: {available}");
 
-            // @ Laboratory? We've done grunt work - research away!
-            if (player.Target == Modules.LABORATORY)
-            {
-                _researched.Add(first.Id);
-                return $"CONNECT {first.Id}";
-            }
+            // TODO: Make Selection of Molecules Smarter (e.g. Availability of Modules/Expertise)
+            var shoppingFor = heldByPlayer
+                .Where(x => IsDiagnosed(x)).ToList()
+                .Where(x => available.Covers(x.Value.Cost, player.Storage))
+                .OrderByDescending(x => x.Value.Health)
+                .First().Value;
 
-            if (!IsDiagnosed(first))
-            {
-                if (player.Target != Modules.DIAGNOSIS)
-                    return Travel(player.Target, Modules.DIAGNOSIS);
+            // Connect and Types for Best Samples (up to max of 10);
+            if (player.Storage.A < shoppingFor.Cost.A) return "CONNECT A";
+            if (player.Storage.B < shoppingFor.Cost.B) return "CONNECT B";
+            if (player.Storage.C < shoppingFor.Cost.C) return "CONNECT C";
+            if (player.Storage.D < shoppingFor.Cost.D) return "CONNECT D";
+            if (player.Storage.E < shoppingFor.Cost.E) return "CONNECT E";
 
-                _diagnosed.Add(first.Id);
-                return $"CONNECT {first.Id}";
-            }
-            else
-            {
-                if (player.Target != Modules.MOLECULES)
-                    return Travel(player.Target, Modules.MOLECULES);
+            // Got Molecules? Go to LABORATORY
+            return Travel(player.Target, Modules.LABORATORY);
+        }
 
-                // Connect and Types for Best Samples (up to max of 10);
-                if (player.Storage.A < first.Cost.A) return "CONNECT A";
-                if (player.Storage.B < first.Cost.B) return "CONNECT B";
-                if (player.Storage.C < first.Cost.C) return "CONNECT C";
-                if (player.Storage.D < first.Cost.D) return "CONNECT D";
-                if (player.Storage.E < first.Cost.E) return "CONNECT E";
+        if (player.Target == Modules.LABORATORY)
+        {
+            var first = heldByPlayer
+                .Where(x => IsUnresearched(x))
+                .Where(x => player.Storage.Covers(x.Value.Cost, player.Storage))
+                .OrderByDescending(x => x.Value.Health)
+                .First().Value;
 
-                // Got Molecules? Go to LABORATORY
-                return Travel(player.Target, Modules.LABORATORY);
-            }
+            _researched.Add(first.Id);
+            return $"CONNECT {first.Id}";
         }
 
         // Shouldn't really get here.
         return "GOTO HELL";
     }
 
-    private bool IsDiagnosed(SampleDataFile sample) => _diagnosed.Contains(sample.Id);
-    private bool IsUndiagnosed(SampleDataFile sample) => !_diagnosed.Contains(sample.Id);
+    private bool IsDiagnosed(KeyValuePair<int, SampleDataFile> sample) => _diagnosed.Contains(sample.Value.Id);
+    private bool IsUndiagnosed(KeyValuePair<int, SampleDataFile> sample) => !_diagnosed.Contains(sample.Value.Id);
+    private bool IsResearched(KeyValuePair<int, SampleDataFile> sample) => _researched.Contains(sample.Value.Id);
+    private bool IsUnresearched(KeyValuePair<int, SampleDataFile> sample) => !_researched.Contains(sample.Value.Id);
 
     private string Travel(string current, string destination)
     {
@@ -312,7 +310,18 @@ public class MoleculeCollection
         E = values[4];
     }
 
-    public override string ToString() => $"A: {A}, B: {B}, C: {C}, D: {D}, E: {E}";
+    public override string ToString() => $"{new String('A', A)}{new String('B', B)}{new String('C', C)}{new String('D', D)}{new String('E', E)}";
+
+    public bool Covers(MoleculeCollection cost, MoleculeCollection storage)
+    {
+        return (
+            A >= (cost.A - storage.A) &&
+            B >= (cost.B - storage.B) &&
+            C >= (cost.C - storage.C) &&
+            D >= (cost.D - storage.D) &&
+            E >= (cost.E - storage.E)
+        );
+    }
 }
 
 public class SampleDataFile
@@ -346,6 +355,7 @@ public static class Actions
 {
     public const string Wait = "WAIT";
     public static string Connect(int idOrRank) => $"CONNECT {idOrRank}";
+    public static string Connect(char molecule) => $"CONNECT {molecule}";
     public static string Goto(string destination) => $"GOTO {destination}";
 }
 
