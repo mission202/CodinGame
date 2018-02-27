@@ -95,6 +95,21 @@ namespace CodinGame.Tests
         }
 
         [Fact]
+        public void AccountsForExpertiseWhenShopping()
+        {
+            // 26: AAAA (10)
+            // 27: BBC (1)
+            // 28: DDDD (10)
+            // Storage: ABCCCDE
+            // Expertise: AAABBCCCDDEE
+            // Available: AAAABBBBCCDDDDEEEE
+
+            // Can actually complete Sample 26 as we've 3 A's in Expertise.
+            var game = new Game("MOLECULES 0 30 1 1 3 1 1 3 2 3 2 2|SAMPLES 0 54 0 0 0 0 0 3 2 1 1 1|4 4 2 4 4|12|26 0 1 D 10 4 0 0 0 0|27 0 1 D 1 0 2 1 0 0|28 0 1 B 10 0 0 0 4 0|29 1 3 0 -1 -1 -1 -1 -1 -1|30 1 3 0 -1 -1 -1 -1 -1 -1|31 1 3 0 -1 -1 -1 -1 -1 -1|9 -1 2 C 30 0 0 6 0 0|16 -1 2 E 20 0 0 5 3 0|17 -1 3 E 40 0 0 3 6 3|20 -1 3 C 50 0 7 3 0 0|24 -1 3 A 50 3 0 0 0 7|25 -1 3 E 30 3 3 5 3 0//0,2,4,6,8,10,13,14,15,21,22,23,26,27,28|4,0,2,8,6,10,13,14,15,21,22,23|");
+            Assert.Equal(Goto.Laboratory, game.GetNextAction());
+        }
+
+        [Fact]
         public void CanSerialiseState()
         {
             // Player, Opponent and Availability is Available Turn-by-Turn
@@ -107,7 +122,5 @@ namespace CodinGame.Tests
         }
 
         // TODO: Fixup 'Researched' Tracking
-
-        // TODO: Handle Expertise - Reduces Cost!
     }
 }

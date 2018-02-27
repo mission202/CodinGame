@@ -217,21 +217,28 @@ public class AI
             foreach (var held in heldByPlayer)
                 Console.Error.WriteLine($"// {held.Value.Id}: {held.Value.Cost} ({held.Value.Health})");
             Console.Error.WriteLine($"// Storage: {player.Storage}");
+            Console.Error.WriteLine($"// Expertise: {player.Expertise}");
             Console.Error.WriteLine($"// Available: {available}");
 
             // TODO: Make Selection of Molecules Smarter (e.g. Availability of Modules/Expertise)
+
+            Console.Error.WriteLine(string.Join(",", heldByPlayer
+                .Where(x => IsDiagnosed(x))
+                .Where(x => available.Covers(x.Value.Cost, player))
+                .Select(x => x.Value.Id)));
+
             var shoppingFor = heldByPlayer
                 .Where(x => IsDiagnosed(x)).ToList()
-                .Where(x => available.Covers(x.Value.Cost, player.Storage))
+                .Where(x => available.Covers(x.Value.Cost, player))
                 .OrderByDescending(x => x.Value.Health)
                 .First().Value;
 
             // Connect and Types for Best Samples (up to max of 10);
-            if (player.Storage.A < shoppingFor.Cost.A) return "CONNECT A";
-            if (player.Storage.B < shoppingFor.Cost.B) return "CONNECT B";
-            if (player.Storage.C < shoppingFor.Cost.C) return "CONNECT C";
-            if (player.Storage.D < shoppingFor.Cost.D) return "CONNECT D";
-            if (player.Storage.E < shoppingFor.Cost.E) return "CONNECT E";
+            if ((player.Storage.A + player.Expertise.A) < shoppingFor.Cost.A) return "CONNECT A";
+            if ((player.Storage.B + player.Expertise.B) < shoppingFor.Cost.B) return "CONNECT B";
+            if ((player.Storage.C + player.Expertise.C) < shoppingFor.Cost.C) return "CONNECT C";
+            if ((player.Storage.D + player.Expertise.D) < shoppingFor.Cost.D) return "CONNECT D";
+            if ((player.Storage.E + player.Expertise.E) < shoppingFor.Cost.E) return "CONNECT E";
 
             // Got Molecules? Go to LABORATORY
             return Travel(player.Target, Modules.LABORATORY);
@@ -246,7 +253,7 @@ public class AI
 
             var researching = heldByPlayer
                 .Where(x => IsUnresearched(x))
-                .Where(x => player.Storage.Covers(x.Value.Cost, player.Storage))
+                .Where(x => player.Storage.Covers(x.Value.Cost, player))
                 .OrderByDescending(x => x.Value.Health)
                 .ToList();
 
@@ -338,14 +345,14 @@ public class MoleculeCollection
 
     public override string ToString() => $"{new String('A', A)}{new String('B', B)}{new String('C', C)}{new String('D', D)}{new String('E', E)}";
 
-    public bool Covers(MoleculeCollection cost, MoleculeCollection storage)
+    public bool Covers(MoleculeCollection cost, Player player)
     {
         return (
-            A >= (cost.A - storage.A) &&
-            B >= (cost.B - storage.B) &&
-            C >= (cost.C - storage.C) &&
-            D >= (cost.D - storage.D) &&
-            E >= (cost.E - storage.E)
+            (A + player.Expertise.A) >= (cost.A - player.Storage.A) &&
+            (B + player.Expertise.B) >= (cost.B - player.Storage.B) &&
+            (C + player.Expertise.C) >= (cost.C - player.Storage.C) &&
+            (D + player.Expertise.D) >= (cost.D - player.Storage.D) &&
+            (E + player.Expertise.E) >= (cost.E - player.Storage.E)
         );
     }
 }
