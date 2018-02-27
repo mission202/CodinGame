@@ -39,6 +39,14 @@ namespace CodinGame.Tests
             Assert.Equal(Goto.Samples, game.GetNextAction());
         }
 
+        [Fact]
+        public void ShouldWaitWhileTravelling()
+        {
+            // START_POS -> SAMPLES = 1 Turn
+            var game = new Game("START_POS 0 0 0 0 0 0 0 0 0 0 0 0|START_POS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/");
+            Assert.Equal(Goto.Samples, game.GetNextAction());
+            Assert.Equal(Actions.Wait, game.GetNextAction());
+        }
 
         [Fact]
         public void CanDeserialise()

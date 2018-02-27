@@ -80,7 +80,10 @@ public class Game
         var samples = Enumerable.Range(0, int.Parse(sampleCount)).Select(i => inputSource()).ToList();
         samples.ForEach(s => UpdateSample(s));
 
-        _history.AppendLine($"{player}|{opponent}|{molecules}|{sampleCount}|{string.Join(",", samples)}");
+        string turn = $"{player}|{opponent}|{molecules}|{sampleCount}|{string.Join(",", samples)}";
+        Console.Error.WriteLine("This Turn");
+        Console.Error.WriteLine(turn);
+        _history.AppendLine(turn);
     }
 
     public Game SetPlayer(string input)
@@ -109,10 +112,6 @@ public class Game
     public void UpdateSample(string input)
     {
         var data = new SampleDataFile(input);
-        Console.Error.WriteLine($"Updating Sample Data for {data.Id}:");
-        Console.Error.WriteLine($"- Carried By: {data.CarriedBy}");
-        Console.Error.WriteLine($"- Player? {data.CarriedByPlayer}");
-
         if (_samples.ContainsKey(data.Id))
             _samples[data.Id] = data;
         else
@@ -137,15 +136,43 @@ public class AI
 
     private readonly HashSet<int> _diagnosed = new HashSet<int>();
     private readonly HashSet<int> _researched = new HashSet<int>();
+    private readonly Queue<string> _queue = new Queue<string>();
+
+    private readonly Dictionary<string, int> _distances = new Dictionary<string, int>
+    {
+        { $"{Modules.START_POS}>{Modules.START_POS}", 0 },
+        { $"{Modules.START_POS}>{Modules.SAMPLES}", 2 },
+        { $"{Modules.START_POS}>{Modules.DIAGNOSIS}", 2 },
+        { $"{Modules.START_POS}>{Modules.MOLECULES}", 2 },
+        { $"{Modules.START_POS}>{Modules.LABORATORY}", 2 },
+        { $"{Modules.SAMPLES}>{Modules.SAMPLES}", 0 },
+        { $"{Modules.SAMPLES}>{Modules.DIAGNOSIS}", 3 },
+        { $"{Modules.SAMPLES}>{Modules.MOLECULES}", 3 },
+        { $"{Modules.SAMPLES}>{Modules.LABORATORY}", 3 },
+        { $"{Modules.DIAGNOSIS}>{Modules.DIAGNOSIS}", 0 },
+        { $"{Modules.DIAGNOSIS}>{Modules.MOLECULES}", 3 },
+        { $"{Modules.DIAGNOSIS}>{Modules.LABORATORY}", 4 },
+        { $"{Modules.MOLECULES}>{Modules.MOLECULES}", 0 },
+        { $"{Modules.MOLECULES}>{Modules.LABORATORY}", 3 },
+        { $"{Modules.LABORATORY}>{Modules.LABORATORY}", 0 }
+    };
 
     public string GetNextAction(Dictionary<int, SampleDataFile> samples, Player player)
     {
+        // Clear Queue (if any)
+        if (_queue.Count > 0)
+            return _queue.Dequeue();
+
+        if (player.Target == Modules.START_POS)
+            return Travel(player.Target, Modules.SAMPLES);
+
         // No Sample Data Files? Go to SAMPLES
         var heldByPlayer = samples.Where(x => x.Value.CarriedByPlayer && !_researched.Contains(x.Value.Id)).ToList();
 
         if (heldByPlayer.Count() == 0)
         {
-            if (player.Target != Modules.SAMPLES) return Goto.Samples;
+            if (player.Target != Modules.SAMPLES)
+                return Travel(player.Target, Modules.SAMPLES);
 
             // Connect and Get Best Sample / "Best" TBC
             var rank = 2; // 1 = Cheaper/Less Health, 3 = Expensive, More Health
@@ -168,7 +195,7 @@ public class AI
             if (!IsDiagnosed(first))
             {
                 if (player.Target != Modules.DIAGNOSIS)
-                    return Goto.Diagnosis;
+                    return Travel(player.Target, Modules.DIAGNOSIS);
 
                 _diagnosed.Add(first.Id);
                 return $"CONNECT {first.Id}";
@@ -176,7 +203,7 @@ public class AI
             else
             {
                 if (player.Target != Modules.MOLECULES)
-                    return Goto.Molecules;
+                    return Travel(player.Target, Modules.MOLECULES);
 
                 // Connect and Types for Best Samples (up to max of 10);
                 if (player.Storage.A < first.Cost.A) return "CONNECT A";
@@ -186,7 +213,7 @@ public class AI
                 if (player.Storage.E < first.Cost.E) return "CONNECT E";
 
                 // Got Molecules? Go to LABORATORY
-                return Goto.Laboratory;
+                return Travel(player.Target, Modules.LABORATORY);
             }
         }
 
@@ -195,6 +222,19 @@ public class AI
     }
 
     private bool IsDiagnosed(SampleDataFile sample) => _diagnosed.Contains(sample.Id);
+
+    private string Travel(string current, string destination)
+    {
+        // current <> destination distance (didn't want to dupe values in Dictionary).
+        var distance = _distances.ContainsKey($"{current}>{destination}")
+            ? _distances[$"{current}>{destination}"]
+            : _distances[$"{destination}>{current}"];
+
+        // Take 1 off Distance for Turn Used by Instruction
+        for (int i = 0; i < distance - 1; i++)
+            _queue.Enqueue(Actions.Wait);
+        return Actions.Goto(destination);
+    }
 }
 
 public class Player
@@ -270,6 +310,12 @@ public class SampleDataFile
         Health = int.Parse(inputs[4]);
         Cost = new MoleculeCollection(inputs.Skip(5).Take(5).Select(int.Parse).ToArray());
     }
+}
+
+public static class Actions
+{
+    public const string Wait = "WAIT";
+    public static string Goto(string destination) => $"GOTO {destination}";
 }
 
 public static class Goto
