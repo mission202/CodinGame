@@ -220,18 +220,15 @@ public class AI
             Console.Error.WriteLine($"// Expertise: {player.Expertise}");
             Console.Error.WriteLine($"// Available: {available}");
 
-            // TODO: Make Selection of Molecules Smarter (e.g. Availability of Modules/Expertise)
+            var list = ShoppingList.Create(new ShoppingList.Parameters
+            {
+                Player = player,
+                Available = available,
+                Diagnosed = _diagnosed,
+                Samples = samples.Values.ToList()
+            });
 
-            Console.Error.WriteLine(string.Join(",", heldByPlayer
-                .Where(x => IsDiagnosed(x))
-                .Where(x => available.Covers(x.Value.Cost, player))
-                .Select(x => x.Value.Id)));
-
-            var shoppingFor = heldByPlayer
-                .Where(x => IsDiagnosed(x)).ToList()
-                .Where(x => available.Covers(x.Value.Cost, player))
-                .OrderByDescending(x => x.Value.Health)
-                .First().Value;
+            var shoppingFor = list.First();
 
             // Connect and Types for Best Samples (up to max of 10);
             if ((player.Storage.A + player.Expertise.A) < shoppingFor.Cost.A) return "CONNECT A";
@@ -334,6 +331,15 @@ public class MoleculeCollection
     public int D { get; private set; }
     public int E { get; private set; }
 
+    public MoleculeCollection(int a, int b, int c, int d, int e)
+    {
+        A = a;
+        B = b;
+        C = c;
+        D = d;
+        E = e;
+    }
+
     public MoleculeCollection(int[] values)
     {
         A = values[0];
@@ -347,6 +353,7 @@ public class MoleculeCollection
 
     public bool Covers(MoleculeCollection cost, Player player)
     {
+        Console.Error.WriteLine($"Checking {cost} against {this}");
         return (
             (A + player.Expertise.A) >= (cost.A - player.Storage.A) &&
             (B + player.Expertise.B) >= (cost.B - player.Storage.B) &&
@@ -381,6 +388,28 @@ public class SampleDataFile
         Gain = inputs[3];
         Health = int.Parse(inputs[4]);
         Cost = new MoleculeCollection(inputs.Skip(5).Take(5).Select(int.Parse).ToArray());
+    }
+}
+
+public class ShoppingList
+{
+    public class Parameters
+    {
+        public Player Player { get; set; }
+        public MoleculeCollection Available { get; set; } = new MoleculeCollection(0, 0, 0, 0, 0);
+        public List<SampleDataFile> Samples { get; set; } = new List<SampleDataFile>();
+        public HashSet<int> Diagnosed { get; set; } = new HashSet<int>();
+    }
+
+    public static IEnumerable<SampleDataFile> Create(Parameters p)
+    {
+        var heldByPlayer = p.Samples
+            .Where(x => x.CarriedByPlayer)
+            .Where(x => p.Diagnosed.Contains(x.Id))
+            .Where(x => p.Available.Covers(x.Cost, p.Player))
+            .OrderByDescending(x => x.Health);
+
+        return heldByPlayer;
     }
 }
 

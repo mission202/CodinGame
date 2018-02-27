@@ -128,8 +128,54 @@ namespace CodinGame.Tests
         // - How many molecules (turns) do I need?
         // - What's the return on completion?
         // - Does it contribute to a Project? (at +50 bonus on completion)
-        // - How many steps left in Project?
+        // - How many projects?
+        // - How many steps left in each Project?
 
         // TODO: What if I can't complete and orders that I have in my hands?
+    }
+
+    public class ShoppingListTests
+    {
+        [Fact]
+        public void ReturnsOwnedAndDiagnosed()
+        {
+            var @params = new ShoppingList.Parameters
+            {
+                Player = new Player("START_POS 0 0 0 0 0 0 0 0 0 0 0 0"),
+                Available = new MoleculeCollection(1, 1, 1, 1, 1 ),
+                Samples = new List<SampleDataFile>
+                {
+                    new SampleDataFile("1 0 1 A 1 1 1 1 1 1"),
+                    new SampleDataFile("2 0 1 A 1 1 1 1 1 1"),
+                    new SampleDataFile("3 0 1 A 1 1 1 1 1 1"),
+                },
+                Diagnosed = new HashSet<int> { 2 }
+            };
+
+            var result = ShoppingList.Create(@params);
+
+            Assert.Single(result);
+        }
+
+        [Fact]
+        public void PrioritisesAvailable()
+        {
+            var @params = new ShoppingList.Parameters
+            {
+                Player = new Player("START_POS 0 0 0 0 0 0 0 0 0 0 0 0"),
+                Available = new MoleculeCollection(1, 1, 1, 1, 1 ),
+                Samples = new List<SampleDataFile>
+                {
+                    new SampleDataFile("1 0 1 A 1 1 1 1 1 1"),
+                    new SampleDataFile("2 0 1 A 2 2 2 2 2 2"),
+                    new SampleDataFile("3 0 1 A 2 2 2 2 2 2"),
+                },
+                Diagnosed = new HashSet<int> { 1, 2, 3 }
+            };
+
+            var result = ShoppingList.Create(@params);
+
+            Assert.Equal(1, result.Single().Id);
+        }
     }
 }
