@@ -31,5 +31,13 @@ namespace CodinGame.Tests
             Assert.Equal(0, sample.Cost.D);
             Assert.Equal(0, sample.Cost.E);
         }
+
+        [Fact]
+        public void CanDeserialise()
+        {
+            var state = "START_POS 0 0 0 0 0 0 0 0 0 0 0 0|START_POS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/";
+            var game = new Game(state);
+            Assert.Equal(Modules.START_POS, game.Player.Target);
+        }
     }
 }

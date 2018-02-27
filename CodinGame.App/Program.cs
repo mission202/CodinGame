@@ -23,16 +23,10 @@ public class Game
         // game loop
         while (true)
         {
-            game
-                .SetPlayer(Console.ReadLine())
-                .SetOpponent(Console.ReadLine())
-                .SetAvailableMolecules(Console.ReadLine().Split(' ').Select(int.Parse).ToArray());
+            game.Setup(Console.ReadLine);
 
-            int sampleCount = int.Parse(Console.ReadLine());
-            for (int i = 0; i < sampleCount; i++)
-            {
-                game.UpdateSample(Console.ReadLine());
-            }
+            Console.Error.WriteLine("Game State:");
+            Console.Error.WriteLine(game.Replay);
 
             Console.WriteLine(game.GetNextAction());
         }
@@ -41,11 +35,14 @@ public class Game
     public const int MAX_SAMPLES = 3;
     public const int MAX_MOLECULES = 10;
 
-    private Player _player;
+    public Player Player { get; private set; }
+
     private Player _opponent;
     private MoleculeCollection _available;
     private Dictionary<int, SampleDataFile> _samples;
     private readonly AI _ai;
+
+    private readonly StringBuilder _history = new StringBuilder();
 
     public Game()
     {
@@ -53,9 +50,42 @@ public class Game
         _ai = new AI();
     }
 
+    public Game(string state) : this()
+    {
+        var lines = state.Split('/');
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line)) break;
+
+            var split = line.Split('|');
+            SetPlayer(split[0]);
+            SetOpponent(split[1]);
+            SetAvailableMolecules(split[2]);
+
+            if (int.Parse(split[3]) > 0)
+                split[4].Split(',').ToList().ForEach(s => UpdateSample(s));
+        }
+    }
+
+    public void Setup(Func<string> inputSource)
+    {
+        var player = inputSource();
+        var opponent = inputSource();
+        var molecules = inputSource();
+        var sampleCount = inputSource();
+
+        SetPlayer(player);
+        SetOpponent(opponent);
+        SetAvailableMolecules(molecules);
+        var samples = Enumerable.Range(0, int.Parse(sampleCount)).Select(i => inputSource());
+        Enumerable.Range(0, int.Parse(sampleCount)).Select(i => inputSource()).ToList().ForEach(s => UpdateSample(s));
+
+        _history.AppendLine($"{player}|{opponent}|{molecules}|{sampleCount}|{string.Join(",", samples)}");
+    }
+
     public Game SetPlayer(string input)
     {
-        _player = new Player(input);
+        Player = new Player(input);
         return this;
     }
 
@@ -65,15 +95,15 @@ public class Game
         return this;
     }
 
-    public Game SetAvailableMolecules(int[] values)
+    public Game SetAvailableMolecules(string values)
     {
-        _available = new MoleculeCollection(values);
+        _available = new MoleculeCollection(values.Split(' ').Select(int.Parse).ToArray());
         return this;
     }
 
     public string GetNextAction()
     {
-        return _ai.GetNextAction(_samples, _player);
+        return _ai.GetNextAction(_samples, Player);
     }
 
     public void UpdateSample(string input)
@@ -87,6 +117,15 @@ public class Game
             _samples[data.Id] = data;
         else
             _samples.Add(data.Id, data);
+    }
+
+    public string Replay
+    {
+        get
+        {
+            var split = _history.ToString().Split(new[] { Environment.NewLine }, StringSplitOptions.None);
+            return string.Join("/", split);
+        }
     }
 }
 
@@ -165,7 +204,7 @@ public class AI
 public class Player
 {
     public string Target { get; private set; }
-    public SampleDataFile[] SampleDataFiles { get; private set; }
+    public int ETA { get; private set; }
     public MoleculeCollection Storage { get; private set; }
     public MoleculeCollection Expertise { get; private set; }
 
@@ -175,13 +214,18 @@ public class Player
         Target = inputs[0];
 
         var ints = inputs.Skip(1).Select(int.Parse).ToArray();
-        int eta = ints[1];
-        int score = ints[2];
-
+        int eta = ints[0];
+        int score = ints[1];
         Storage = new MoleculeCollection(ints.Skip(2).Take(5).ToArray());
-        //Console.Error.WriteLine($"Storage: {Storage}");
         Expertise = new MoleculeCollection(ints.Skip(7).Take(5).ToArray());
-        //Console.Error.WriteLine($"Expertise: {Expertise}");
+    }
+
+    public Player(string target, int eta, int score, MoleculeCollection storage, MoleculeCollection expertise)
+    {
+        Target = target;
+        ETA = eta;
+        Storage = storage;
+        Expertise = expertise;
     }
 }
 
@@ -234,6 +278,7 @@ public class SampleDataFile
 
 public static class Modules
 {
+    public const string START_POS = "START_POS";
     public const string SAMPLES = "SAMPLES";
     public const string DIAGNOSIS = "DIAGNOSIS";
     public const string MOLECULES = "MOLECULES";
