@@ -121,6 +121,15 @@ namespace CodinGame.Tests
             Assert.Equal(Modules.START_POS, deserialised.Player.Target);
         }
 
-        // TODO: Fixup 'Researched' Tracking
+        // TODO: Run Projects - Big Points!
+
+        // TODO: Scoring of Sample Projects During Shopping:
+        // - Can I even complete the Order? (Storage + Expertise + Available < Sample Requirements)
+        // - How many molecules (turns) do I need?
+        // - What's the return on completion?
+        // - Does it contribute to a Project? (at +50 bonus on completion)
+        // - How many steps left in Project?
+
+        // TODO: What if I can't complete and orders that I have in my hands?
     }
 }

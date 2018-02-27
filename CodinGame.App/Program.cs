@@ -15,7 +15,7 @@ public class Game
         {
             inputs = Console.ReadLine().Split(' ');
             var project = new MoleculeCollection(inputs.Select(int.Parse).ToArray());
-            //Console.Error.WriteLine($"Project: {project}");
+            Console.Error.WriteLine($"Project: {project}");
         }
 
         var game = new Game();
@@ -215,7 +215,7 @@ public class AI
         {
             Console.Error.WriteLine("== SHOPPING! ==");
             foreach (var held in heldByPlayer)
-                Console.Error.WriteLine($"// {held.Value.Id}: {held.Value.Cost} ({held.Value.Health})");
+                Console.Error.WriteLine($"// {held.Value.Id}: {held.Value.Cost} ({held.Value.Health}) Exp: {held.Value.Gain}");
             Console.Error.WriteLine($"// Storage: {player.Storage}");
             Console.Error.WriteLine($"// Expertise: {player.Expertise}");
             Console.Error.WriteLine($"// Available: {available}");
