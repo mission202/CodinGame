@@ -7,9 +7,6 @@ using System.Collections.Generic;
 
 public class Game
 {
-    public const int MAX_SAMPLES = 3;
-    public const int MAX_MOLECULES = 10;
-
     static void Main(string[] args)
     {
         string[] inputs;
@@ -21,93 +18,148 @@ public class Game
             //Console.Error.WriteLine($"Project: {project}");
         }
 
-        Player player;
-        Player opponent;
-        List<SampleDataFile> samples;
+        var game = new Game();
 
         // game loop
         while (true)
         {
-            player = new Player(Console.ReadLine());
-            opponent = new Player(Console.ReadLine());
+            game
+                .SetPlayer(Console.ReadLine())
+                .SetOpponent(Console.ReadLine())
+                .SetAvailableMolecules(Console.ReadLine().Split(' ').Select(int.Parse).ToArray());
 
-            inputs = Console.ReadLine().Split(' ');
-            var available = new MoleculeCollection(inputs.Select(int.Parse).ToArray());
-            //Console.Error.WriteLine($"Available: {available}");
-
-            samples = new List<SampleDataFile>();
             int sampleCount = int.Parse(Console.ReadLine());
             for (int i = 0; i < sampleCount; i++)
             {
-                var input = Console.ReadLine();
-                samples.Add(new SampleDataFile(input));
+                game.UpdateSample(Console.ReadLine());
             }
 
-            var ai = new AI(samples, player);
-            Console.WriteLine(ai.GetNextAction());
+            Console.WriteLine(game.GetNextAction());
         }
+    }
+
+    public const int MAX_SAMPLES = 3;
+    public const int MAX_MOLECULES = 10;
+
+    private Player _player;
+    private Player _opponent;
+    private MoleculeCollection _available;
+    private Dictionary<int, SampleDataFile> _samples;
+    private readonly AI _ai;
+
+    public Game()
+    {
+        _samples = new Dictionary<int, SampleDataFile>();
+        _ai = new AI();
+    }
+
+    public Game SetPlayer(string input)
+    {
+        _player = new Player(input);
+        return this;
+    }
+
+    public Game SetOpponent(string input)
+    {
+        _opponent = new Player(input);
+        return this;
+    }
+
+    public Game SetAvailableMolecules(int[] values)
+    {
+        _available = new MoleculeCollection(values);
+        return this;
+    }
+
+    public string GetNextAction()
+    {
+        return _ai.GetNextAction(_samples, _player);
+    }
+
+    public void UpdateSample(string input)
+    {
+        var data = new SampleDataFile(input);
+        Console.Error.WriteLine($"Updating Sample Data for {data.Id}:");
+        Console.Error.WriteLine($"- Carried By: {data.CarriedBy}");
+        Console.Error.WriteLine($"- Player? {data.CarriedByPlayer}");
+
+        if (_samples.ContainsKey(data.Id))
+            _samples[data.Id] = data;
+        else
+            _samples.Add(data.Id, data);
     }
 }
 
 public class AI
 {
-    public List<SampleDataFile> Samples { get; }
-    public Player Player { get; }
 
     public const int MAX_SAMPLES = 3;
     public const int MAX_MOLECULES = 10;
 
-    public AI(List<SampleDataFile> samples, Player player)
-    {
-        Samples = samples;
-        Player = player;
-    }
+    private readonly HashSet<int> _diagnosed = new HashSet<int>();
+    private readonly HashSet<int> _researched = new HashSet<int>();
 
-    public string GetNextAction()
+    public string GetNextAction(Dictionary<int, SampleDataFile> samples, Player player)
     {
         // No Sample Data Files? Go to SAMPLES
-        var heldByPlayer = Samples.Where(x => x.CarriedByPlayer).ToList();
-
-        // We've done grunt work - research away!
-        if (Player.Target == Modules.LABORATORY && heldByPlayer.Count > 0)
-        {
-            var toResearch = heldByPlayer.OrderByDescending(x => x.Health).First();
-            return $"CONNECT {toResearch.Id}";
-        }
+        var heldByPlayer = samples.Where(x => x.Value.CarriedByPlayer && !_researched.Contains(x.Value.Id)).ToList();
 
         if (heldByPlayer.Count() == 0)
         {
-            if (Player.Target != Modules.SAMPLES) return $"GOTO {Modules.SAMPLES}";
+            if (player.Target != Modules.SAMPLES) return $"GOTO {Modules.SAMPLES}";
 
             // Connect and Get Best Sample / "Best" TBC
-            var rank = 3; // 1 = Cheaper/Less Health
+            var rank = 2; // 1 = Cheaper/Less Health, 3 = Expensive, More Health
             return $"CONNECT {rank}";
         }
 
         // Got Files? Need to Get Molecule Requirements from DIAGNOSIS.
-
-        // Got Files, Need Molecules? Go to MOLECULES
         if (heldByPlayer.Count() > 0)
         {
-            if (Player.Target != Modules.MOLECULES)
-                return $"GOTO {Modules.MOLECULES}";
+            var first = heldByPlayer.OrderByDescending(x => x.Value.Health).First().Value;
+            Console.Error.WriteLine($"Holding {first.Id} - {first.Health}pts");
 
-            // Connect and Types for Best Samples (up to max of 10);
-            var shoppingFor = heldByPlayer.OrderByDescending(x => x.Health).First();
+            // @ Laboratory? We've done grunt work - research away!
+            if (player.Target == Modules.LABORATORY)
+            {
+                _researched.Add(first.Id);
+                return $"CONNECT {first.Id}";
+            }
 
-            if (Player.Storage.A < shoppingFor.Cost.A) return "CONNECT A";
-            if (Player.Storage.B < shoppingFor.Cost.B) return "CONNECT B";
-            if (Player.Storage.C < shoppingFor.Cost.C) return "CONNECT C";
-            if (Player.Storage.D < shoppingFor.Cost.D) return "CONNECT D";
-            if (Player.Storage.E < shoppingFor.Cost.E) return "CONNECT E";
+            if (!IsDiagnosed(first))
+            {
+                if (player.Target != Modules.DIAGNOSIS)
+                    return $"GOTO {Modules.DIAGNOSIS}";
 
-            // Got Molecules? Go to LABORATORY
-            return $"GOTO {Modules.LABORATORY}";
+                _diagnosed.Add(first.Id);
+                return $"CONNECT {first.Id}";
+            }
+            else
+            {
+                if (player.Target != Modules.MOLECULES)
+                    return $"GOTO {Modules.MOLECULES}";
+
+                Console.Error.WriteLine($"Collecting for {first.Id} - {first.Health}pts");
+                Console.Error.WriteLine($"- Cost: {first.Cost}.");
+                Console.Error.WriteLine($"- Have: {player.Storage}");
+
+                // Connect and Types for Best Samples (up to max of 10);
+                if (player.Storage.A < first.Cost.A) return "CONNECT A";
+                if (player.Storage.B < first.Cost.B) return "CONNECT B";
+                if (player.Storage.C < first.Cost.C) return "CONNECT C";
+                if (player.Storage.D < first.Cost.D) return "CONNECT D";
+                if (player.Storage.E < first.Cost.E) return "CONNECT E";
+
+                // Got Molecules? Go to LABORATORY
+                return $"GOTO {Modules.LABORATORY}";
+            }
         }
 
         // Shouldn't really get here.
         return "GOTO HELL";
     }
+
+    private bool IsDiagnosed(SampleDataFile sample) => _diagnosed.Contains(sample.Id);
 }
 
 public class Player
@@ -161,7 +213,6 @@ public class SampleDataFile
     public bool CarriedByPlayer => CarriedBy == 0;
     public bool CarriedByOpponent => CarriedBy == 1;
     public bool InCloud => CarriedBy == -1;
-    public string State = States.UNDIAGNOSED;
 
     public int Rank { get; private set; }
     public string Gain { get; private set; }
