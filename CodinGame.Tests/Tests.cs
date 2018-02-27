@@ -33,6 +33,14 @@ namespace CodinGame.Tests
         }
 
         [Fact]
+        public void ShouldGetSamplesAtStart()
+        {
+            var game = new Game("START_POS 0 0 0 0 0 0 0 0 0 0 0 0|START_POS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/");
+            Assert.Equal(Goto.Samples, game.GetNextAction());
+        }
+
+
+        [Fact]
         public void CanDeserialise()
         {
             var state = "START_POS 0 0 0 0 0 0 0 0 0 0 0 0|START_POS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/";

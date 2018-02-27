@@ -77,8 +77,8 @@ public class Game
         SetPlayer(player);
         SetOpponent(opponent);
         SetAvailableMolecules(molecules);
-        var samples = Enumerable.Range(0, int.Parse(sampleCount)).Select(i => inputSource());
-        Enumerable.Range(0, int.Parse(sampleCount)).Select(i => inputSource()).ToList().ForEach(s => UpdateSample(s));
+        var samples = Enumerable.Range(0, int.Parse(sampleCount)).Select(i => inputSource()).ToList();
+        samples.ForEach(s => UpdateSample(s));
 
         _history.AppendLine($"{player}|{opponent}|{molecules}|{sampleCount}|{string.Join(",", samples)}");
     }
@@ -145,7 +145,7 @@ public class AI
 
         if (heldByPlayer.Count() == 0)
         {
-            if (player.Target != Modules.SAMPLES) return $"GOTO {Modules.SAMPLES}";
+            if (player.Target != Modules.SAMPLES) return Goto.Samples;
 
             // Connect and Get Best Sample / "Best" TBC
             var rank = 2; // 1 = Cheaper/Less Health, 3 = Expensive, More Health
@@ -168,7 +168,7 @@ public class AI
             if (!IsDiagnosed(first))
             {
                 if (player.Target != Modules.DIAGNOSIS)
-                    return $"GOTO {Modules.DIAGNOSIS}";
+                    return Goto.Diagnosis;
 
                 _diagnosed.Add(first.Id);
                 return $"CONNECT {first.Id}";
@@ -176,11 +176,7 @@ public class AI
             else
             {
                 if (player.Target != Modules.MOLECULES)
-                    return $"GOTO {Modules.MOLECULES}";
-
-                Console.Error.WriteLine($"Collecting for {first.Id} - {first.Health}pts");
-                Console.Error.WriteLine($"- Cost: {first.Cost}.");
-                Console.Error.WriteLine($"- Have: {player.Storage}");
+                    return Goto.Molecules;
 
                 // Connect and Types for Best Samples (up to max of 10);
                 if (player.Storage.A < first.Cost.A) return "CONNECT A";
@@ -190,7 +186,7 @@ public class AI
                 if (player.Storage.E < first.Cost.E) return "CONNECT E";
 
                 // Got Molecules? Go to LABORATORY
-                return $"GOTO {Modules.LABORATORY}";
+                return Goto.Laboratory;
             }
         }
 
@@ -274,6 +270,15 @@ public class SampleDataFile
         Health = int.Parse(inputs[4]);
         Cost = new MoleculeCollection(inputs.Skip(5).Take(5).Select(int.Parse).ToArray());
     }
+}
+
+public static class Goto
+{
+    private const string PREFIX = "GOTO ";
+    public const string Samples = PREFIX + Modules.SAMPLES;
+    public const string Diagnosis = PREFIX + Modules.DIAGNOSIS;
+    public const string Molecules = PREFIX + Modules.MOLECULES;
+    public const string Laboratory = PREFIX + Modules.LABORATORY;
 }
 
 public static class Modules
