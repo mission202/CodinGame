@@ -26,7 +26,7 @@ public class Game
             game.Setup(Console.ReadLine);
 
             Console.Error.WriteLine("Game State:");
-            Console.Error.WriteLine(game.Replay);
+            Console.Error.WriteLine(game.Serialise);
 
             Console.WriteLine(game.GetNextAction());
         }
@@ -42,7 +42,7 @@ public class Game
     private Dictionary<int, SampleDataFile> _samples;
     private readonly AI _ai;
 
-    private readonly StringBuilder _history = new StringBuilder();
+    private string _lastUpdate = string.Empty;
 
     public Game()
     {
@@ -52,21 +52,9 @@ public class Game
 
     public Game(string state) : this()
     {
-        var lines = state.Split('/');
-        foreach (var line in lines)
-        {
-            if (string.IsNullOrWhiteSpace(line)) break;
-
-            var split = line.Split('|');
-            SetPlayer(split[0]);
-            SetOpponent(split[1]);
-            SetAvailableMolecules(split[2]);
-
-            if (int.Parse(split[3]) > 0)
-                split[4].Split(',').ToList().ForEach(s => UpdateSample(s));
-
-            Console.Error.WriteLine($"Played: {GetNextAction()}");
-        }
+        var turnAndAI = state.Split(new [] { "//" }, StringSplitOptions.None);
+        Setup(turnAndAI[0]);
+        _ai = new AI(turnAndAI[1]);
     }
 
     public void Setup(Func<string> inputSource)
@@ -82,10 +70,13 @@ public class Game
         var samples = Enumerable.Range(0, int.Parse(sampleCount)).Select(i => inputSource()).ToList();
         samples.ForEach(s => UpdateSample(s));
 
-        string turn = $"{player}|{opponent}|{molecules}|{sampleCount}|{string.Join(",", samples)}";
-        Console.Error.WriteLine("This Turn");
-        Console.Error.WriteLine(turn);
-        _history.AppendLine(turn);
+        _lastUpdate = $"{player}|{opponent}|{molecules}|{sampleCount}|{string.Join("|", samples)}";
+    }
+
+    public void Setup(string input)
+    {
+        var buffer = new Queue<string>(input.Split('|'));
+        Setup(buffer.Dequeue);
     }
 
     public Game SetPlayer(string input)
@@ -120,14 +111,7 @@ public class Game
             _samples.Add(data.Id, data);
     }
 
-    public string Replay
-    {
-        get
-        {
-            var split = _history.ToString().Split(new[] { Environment.NewLine }, StringSplitOptions.None);
-            return string.Join("/", split);
-        }
-    }
+    public string Serialise => $"{_lastUpdate}//{_ai.Serialise}";
 }
 
 public class AI
@@ -159,6 +143,29 @@ public class AI
         { $"{Modules.LABORATORY}>{Modules.LABORATORY}", 0 }
     };
 
+    public AI()
+    {
+        // Default
+    }
+
+    public AI(string state)
+    {
+        var split = state.Split('|');
+        Console.Error.WriteLine(string.Join(",", split));
+
+        _diagnosed = string.IsNullOrWhiteSpace(split[0])
+            ? new HashSet<int>()
+            : new HashSet<int>(split[0].Split(',').Select(int.Parse));
+
+        _researched = string.IsNullOrWhiteSpace(split[1])
+            ? new HashSet<int>()
+            : new HashSet<int>(split[1].Split(',').Select(int.Parse));
+
+        _queue = string.IsNullOrWhiteSpace(split[2])
+            ? new Queue<string>()
+            : new Queue<string>(split[2].Split(','));
+    }
+
     public string GetNextAction(Dictionary<int, SampleDataFile> samples, Player player, MoleculeCollection available)
     {
         // Clear Queue (if any)
@@ -169,7 +176,7 @@ public class AI
             return Travel(player.Target, Modules.SAMPLES);
 
         // No Sample Data Files? Go to SAMPLES
-        var heldByPlayer = samples.Where(x => x.Value.CarriedByPlayer && !_researched.Contains(x.Value.Id)).ToList();
+        var heldByPlayer = samples.Where(x => x.Value.CarriedByPlayer && IsUnresearched(x)).ToList();
 
         if (player.Target == Modules.SAMPLES)
         {
@@ -232,6 +239,11 @@ public class AI
 
         if (player.Target == Modules.LABORATORY)
         {
+            Console.Error.WriteLine("== RESEARCHING! ==");
+            foreach (var held in heldByPlayer)
+                Console.Error.WriteLine($"// {held.Value.Id}: {held.Value.Cost} ({held.Value.Health})");
+            Console.Error.WriteLine($"// Storage: {player.Storage}");
+
             var first = heldByPlayer
                 .Where(x => IsUnresearched(x))
                 .Where(x => player.Storage.Covers(x.Value.Cost, player.Storage))
@@ -262,6 +274,14 @@ public class AI
         for (int i = 0; i < distance - 1; i++)
             _queue.Enqueue(Actions.Wait);
         return Actions.Goto(destination);
+    }
+
+    public string Serialise
+    {
+        get
+        {
+            return $"{string.Join(",", _diagnosed)}|{string.Join(",", _researched)}|{string.Join(",", _queue)}";
+        }
     }
 }
 
