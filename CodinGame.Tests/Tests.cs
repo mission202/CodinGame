@@ -33,10 +33,12 @@ namespace CodinGame.Tests
         }
 
         [Fact]
-        public void ShouldGetSamplesAtStart()
+        public void ShouldGet3Rank1SampplesAtStart()
         {
-            var game = new Game("START_POS 0 0 0 0 0 0 0 0 0 0 0 0|START_POS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/");
-            Assert.Equal(Goto.Samples, game.GetNextAction());
+            var game = new Game("START_POS 0 0 0 0 0 0 0 0 0 0 0 0|START_POS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 1 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 1 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/");
+            Assert.Equal(Actions.Connect(1), game.GetNextAction());
+            Assert.Equal(Actions.Connect(1), game.GetNextAction());
+            Assert.Equal(Actions.Connect(1), game.GetNextAction());
         }
 
         [Fact]
@@ -46,6 +48,29 @@ namespace CodinGame.Tests
             var game = new Game("START_POS 0 0 0 0 0 0 0 0 0 0 0 0|START_POS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/");
             Assert.Equal(Goto.Samples, game.GetNextAction());
             Assert.Equal(Actions.Wait, game.GetNextAction());
+        }
+
+        [Fact]
+        public void ShouldGoToDiagnosisIfHave3Samples()
+        {
+            var game = new Game("START_POS 0 0 0 0 0 0 0 0 0 0 0 0|START_POS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 1 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 1 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|2|0 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|4|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/");
+            Assert.Equal(Goto.Diagnosis, game.GetNextAction());
+        }
+
+        [Fact]
+        public void ShouldDiagnoseUndiagnosedSamples()
+        {
+            var game = new Game("START_POS 0 0 0 0 0 0 0 0 0 0 0 0|START_POS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 1 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 1 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|2|0 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|4|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 2 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 2 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 1 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 1 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/");
+            Assert.Equal(Actions.Connect(0), game.GetNextAction());
+            Assert.Equal(Actions.Connect(2), game.GetNextAction());
+            Assert.Equal(Actions.Connect(4), game.GetNextAction());
+        }
+
+        [Fact]
+        public void ShouldGoToMoleculesAfterDiagnossis()
+        {
+            var game = new Game("START_POS 0 0 0 0 0 0 0 0 0 0 0 0|START_POS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 1 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 1 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|0|/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|2|0 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|4|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1/SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|SAMPLES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 2 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 2 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 1 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 1 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 0 -1 -1 -1 -1 -1 -1,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 0 -1 -1 -1 -1 -1 -1,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 0 -1 -1 -1 -1 -1 -1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 A 1 0 3 0 0 0,3 1 1 0 -1 -1 -1 -1 -1 -1,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 B 1 1 0 1 2 1,4 0 1 0 -1 -1 -1 -1 -1 -1,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 0 -1 -1 -1 -1 -1 -1/DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|0 0 1 D 1 3 0 0 0 0,2 0 1 B 1 1 0 1 2 1,4 0 1 E 10 0 4 0 0 0,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 B 1 0 0 2 0 2/DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|MOLECULES 2 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|2 0 1 B 1 1 0 1 2 1,4 0 1 E 10 0 4 0 0 0,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 B 1 0 0 2 0 2,0 -1 1 D 1 3 0 0 0 0/DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|MOLECULES 1 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|4 0 1 E 10 0 4 0 0 0,1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 B 1 0 0 2 0 2,0 -1 1 D 1 3 0 0 0 0,2 -1 1 B 1 1 0 1 2 1/DIAGNOSIS 0 0 0 0 0 0 0 0 0 0 0 0|MOLECULES 0 0 0 0 0 0 0 0 0 0 0 0|5 5 5 5 5|6|1 1 1 A 1 0 3 0 0 0,3 1 1 E 1 0 0 3 0 0,5 1 1 B 1 0 0 2 0 2,0 -1 1 D 1 3 0 0 0 0,2 -1 1 B 1 1 0 1 2 1,4 -1 1 E 10 0 4 0 0 0/");
+            Assert.Equal(Goto.Molecules, game.GetNextAction());
         }
 
         [Fact]

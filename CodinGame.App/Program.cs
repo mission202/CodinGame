@@ -169,14 +169,43 @@ public class AI
         // No Sample Data Files? Go to SAMPLES
         var heldByPlayer = samples.Where(x => x.Value.CarriedByPlayer && !_researched.Contains(x.Value.Id)).ToList();
 
-        if (heldByPlayer.Count() == 0)
-        {
-            if (player.Target != Modules.SAMPLES)
-                return Travel(player.Target, Modules.SAMPLES);
+        //if (heldByPlayer.Count() == 0)
+        //{
+        //    if (player.Target != Modules.SAMPLES)
+        //        return Travel(player.Target, Modules.SAMPLES);
 
-            // Connect and Get Best Sample / "Best" TBC
-            var rank = 2; // 1 = Cheaper/Less Health, 3 = Expensive, More Health
-            return $"CONNECT {rank}";
+        //    // Connect and Get Best Sample / "Best" TBC
+        //    var rank = 2; // 1 = Cheaper/Less Health, 3 = Expensive, More Health
+        //    return $"CONNECT {rank}";
+        //}
+
+        if (player.Target == Modules.SAMPLES)
+        {
+            // Queue Up Collection of Samples
+            // TODO: Make Selection of Rank Smarter (e.g. Availability of Modules/Expertise)
+            var need = MAX_SAMPLES - heldByPlayer.Count;
+
+            if (need == 0)
+                return Travel(player.Target, Modules.DIAGNOSIS);
+
+            for (int i = 0; i < need; i++)
+                _queue.Enqueue(Actions.Connect(1));
+
+            return _queue.Dequeue();
+        }
+
+        if (player.Target == Modules.DIAGNOSIS)
+        {
+            var toDiagnose = heldByPlayer
+                .Where(x => IsUndiagnosed(x.Value)).ToList();
+
+            if (toDiagnose.Any())
+            {
+                toDiagnose.ForEach(sample => _queue.Enqueue(Actions.Connect(sample.Value.Id)));
+                return _queue.Dequeue();
+            }
+
+            return Travel(player.Target, Modules.MOLECULES);
         }
 
         // Got Files? Need to Get Molecule Requirements from DIAGNOSIS.
@@ -222,6 +251,7 @@ public class AI
     }
 
     private bool IsDiagnosed(SampleDataFile sample) => _diagnosed.Contains(sample.Id);
+    private bool IsUndiagnosed(SampleDataFile sample) => !_diagnosed.Contains(sample.Id);
 
     private string Travel(string current, string destination)
     {
@@ -315,6 +345,7 @@ public class SampleDataFile
 public static class Actions
 {
     public const string Wait = "WAIT";
+    public static string Connect(int idOrRank) => $"CONNECT {idOrRank}";
     public static string Goto(string destination) => $"GOTO {destination}";
 }
 
