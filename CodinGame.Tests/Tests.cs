@@ -23,7 +23,7 @@ namespace CodinGame.Tests
             Assert.Equal(-1, sample.CarriedBy);
             Assert.True(sample.InCloud);
             Assert.Equal(1, sample.Rank);
-            Assert.Equal("0", sample.Gain);
+            Assert.Equal('0', sample.Gain);
             Assert.Equal(1, sample.Health);
             Assert.Equal(0, sample.Cost.A);
             Assert.Equal(2, sample.Cost.B);
@@ -109,6 +109,15 @@ namespace CodinGame.Tests
             Assert.Equal(Goto.Laboratory, game.GetNextAction());
         }
 
+        [Theory]
+        [InlineData("3|0 4 4 0 0|3 3 3 0 0|4 0 0 0 4|LABORATORY 0 0 0 0 0 2 2 0 0 0 0 0|LABORATORY 0 1 0 0 0 0 0 0 1 0 0 0|5 5 5 3 3|5|0 0 1 C 10 0 0 0 0 4|2 0 1 A 1 0 0 0 2 1|4 0 1 A 1 0 1 2 1 1|3 1 1 D 1 1 1 1 0 1|5 1 1 C 1 1 1 0 1 2//0,2,4||", "CONNECT 2")]
+        [InlineData("3|0 4 4 0 0|4 4 0 0 0|0 0 3 3 3|MOLECULES 0 1 2 0 0 1 0 0 0 0 1 0|MOLECULES 0 10 0 0 1 0 2 0 0 1 0 0|3 5 4 4 3|4|2 0 1 C 1 2 1 0 0 0|4 0 1 E 1 1 1 1 1 0|3 1 1 B 1 0 0 2 0 2|5 1 1 D 1 1 0 0 1 3//0,2,4|0|", "CONNECT B")]
+        public void Debugging(string state, string expected)
+        {
+            var game = new Game(state);
+            Assert.Equal(expected, game.GetNextAction());
+        }
+
         // TODO: Run Projects - Big Points!
 
         // TODO: Scoring of Sample Projects During Shopping:
@@ -130,7 +139,7 @@ namespace CodinGame.Tests
             var @params = new ShoppingList.Parameters
             {
                 Player = new Player("START_POS 0 0 0 0 0 0 0 0 0 0 0 0"),
-                Available = new MoleculeCollection(1, 1, 1, 1, 1 ),
+                Available = new MoleculeCollection(1, 1, 1, 1, 1),
                 Samples = new List<SampleDataFile>
                 {
                     new SampleDataFile("1 0 1 A 1 1 1 1 1 1"),
@@ -151,7 +160,7 @@ namespace CodinGame.Tests
             var @params = new ShoppingList.Parameters
             {
                 Player = new Player("START_POS 0 0 0 0 0 0 0 0 0 0 0 0"),
-                Available = new MoleculeCollection(1, 1, 1, 1, 1 ),
+                Available = new MoleculeCollection(1, 1, 1, 1, 1),
                 Samples = new List<SampleDataFile>
                 {
                     new SampleDataFile("1 0 1 A 1 1 1 1 1 1"),
@@ -164,6 +173,33 @@ namespace CodinGame.Tests
             var result = ShoppingList.Create(@params);
 
             Assert.Equal(1, result.Single().Id);
+        }
+
+        [Fact]
+        public void PrioritisesProjectImpact()
+        {
+            var @params = new ShoppingList.Parameters
+            {
+                Player = new Player("START_POS 0 0 0 0 0 0 0 0 0 0 0 0"),
+                Available = new MoleculeCollection(1, 1, 1, 1, 1),
+                Samples = new List<SampleDataFile>
+                {
+                    new SampleDataFile("1 0 1 A 1 1 1 1 1 1"),
+                    new SampleDataFile("2 0 1 B 1 1 1 1 1 1"),
+                    new SampleDataFile("3 0 1 C 1 1 1 1 1 1"),
+                },
+                Diagnosed = new HashSet<int> { 1, 2, 3 },
+                Projects = new MoleculeCollection[]
+                {
+                    new MoleculeCollection(1, 0, 0, 0, 0),
+                    new MoleculeCollection(0, 0, 1, 0, 0),
+                    new MoleculeCollection(0, 0, 1, 0, 0),
+                }
+            };
+
+            var result = ShoppingList.Create(@params);
+
+            Assert.Equal(3, result.First().Id);
         }
     }
 }

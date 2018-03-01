@@ -49,7 +49,6 @@ public class Game
         _inputSource = input.Dequeue;
         LoadProjects();
         ProcessTurn();
-
     }
 
     public void ProcessTurn()
@@ -70,7 +69,9 @@ public class Game
 
     public string GetNextAction()
     {
-        return _ai.GetNextAction(_projects, _samples, _player, _available);
+        var next = _ai.GetNextAction(_projects, _samples, _player, _available);
+        Console.Error.WriteLine(next);
+        return next;
     }
 
     private void LoadProjects()
@@ -101,8 +102,8 @@ public class Game
             var sb = new StringBuilder();
             sb.AppendLine(_projects.Count().ToString());
             foreach (var p in _projects)
-                sb.AppendLine(p.ToString());
-            return $"{string.Join("|", sb.ToString().Split(new[] {'\n'}, StringSplitOptions.RemoveEmptyEntries))}//{_lastUpdate}//{_ai.Serialise}";
+                sb.AppendLine(p.AsInput());
+            return $"{string.Join("|", sb.ToString().Split(new[] {'\n'}, StringSplitOptions.RemoveEmptyEntries))}|{_lastUpdate}//{_ai.Serialise}";
         }
     }
 }
@@ -161,6 +162,10 @@ public class AI
 
     public string GetNextAction(MoleculeCollection[] projects, Dictionary<int, SampleDataFile> samples, Player player, MoleculeCollection available)
     {
+        Console.Error.WriteLine($"Diagnosed: {string.Join(", ", _diagnosed)}");
+        Console.Error.WriteLine($"Researched: {string.Join(", ", _researched)}");
+        Console.Error.WriteLine($"Queue: {string.Join(" -> ", _queue)}");
+
         // Clear Queue (if any)
         if (_queue.Count > 0)
             return _queue.Dequeue();
@@ -244,7 +249,7 @@ public class AI
 
             var researching = heldByPlayer
                 .Where(x => IsUnresearched(x))
-                .Where(x => player.Storage.Covers(x.Value.Cost, player))
+                .Where(x => player.CanAfford(x.Value.Cost))
                 .OrderByDescending(x => x.Value.Health)
                 .ToList();
 
@@ -316,6 +321,16 @@ public class Player
         Storage = storage;
         Expertise = expertise;
     }
+
+    public bool CanAfford(MoleculeCollection collection)
+    {
+        return
+            (Storage.A + Expertise.A) >= collection.A &&
+            (Storage.B + Expertise.B) >= collection.B &&
+            (Storage.C + Expertise.C) >= collection.C &&
+            (Storage.D + Expertise.D) >= collection.D &&
+            (Storage.E + Expertise.E) >= collection.E;
+    }
 }
 
 public class MoleculeCollection
@@ -344,17 +359,31 @@ public class MoleculeCollection
         E = values[4];
     }
 
+    public int this[char molecule]
+    {
+        get
+        {
+            if (molecule == 'A') return A;
+            if (molecule == 'B') return B;
+            if (molecule == 'C') return C;
+            if (molecule == 'D') return D;
+            if (molecule == 'E') return E;
+            return 0;
+        }
+    }
+
     public override string ToString() => $"{new String('A', A)}{new String('B', B)}{new String('C', C)}{new String('D', D)}{new String('E', E)}";
 
-    public bool Covers(MoleculeCollection cost, Player player)
+    public string AsInput() => $"{A} {B} {C} {D} {E}";
+
+    public bool Covers(MoleculeCollection cost)
     {
-        Console.Error.WriteLine($"Checking {cost} against {this}");
         return (
-            (A + player.Expertise.A) >= (cost.A - player.Storage.A) &&
-            (B + player.Expertise.B) >= (cost.B - player.Storage.B) &&
-            (C + player.Expertise.C) >= (cost.C - player.Storage.C) &&
-            (D + player.Expertise.D) >= (cost.D - player.Storage.D) &&
-            (E + player.Expertise.E) >= (cost.E - player.Storage.E)
+            A >= cost.A &&
+            B >= cost.B &&
+            C >= cost.C &&
+            D >= cost.D &&
+            E >= cost.E
         );
     }
 }
@@ -369,7 +398,7 @@ public class SampleDataFile
     public bool InCloud => CarriedBy == -1;
 
     public int Rank { get; private set; }
-    public string Gain { get; private set; }
+    public char Gain { get; private set; }
     public int Health { get; private set; }
 
     public MoleculeCollection Cost { get; private set; }
@@ -380,7 +409,7 @@ public class SampleDataFile
         Id = int.Parse(inputs[0]);
         CarriedBy = int.Parse(inputs[1]);
         Rank = int.Parse(inputs[2]);
-        Gain = inputs[3];
+        Gain = inputs[3][0];
         Health = int.Parse(inputs[4]);
         Cost = new MoleculeCollection(inputs.Skip(5).Take(5).Select(int.Parse).ToArray());
     }
@@ -394,6 +423,7 @@ public class ShoppingList
         public MoleculeCollection Available { get; set; } = new MoleculeCollection(0, 0, 0, 0, 0);
         public List<SampleDataFile> Samples { get; set; } = new List<SampleDataFile>();
         public HashSet<int> Diagnosed { get; set; } = new HashSet<int>();
+        public MoleculeCollection[] Projects { get; set; } = new MoleculeCollection[0];
     }
 
     public static IEnumerable<SampleDataFile> Create(Parameters p)
@@ -401,10 +431,19 @@ public class ShoppingList
         var heldByPlayer = p.Samples
             .Where(x => x.CarriedByPlayer)
             .Where(x => p.Diagnosed.Contains(x.Id))
-            .Where(x => p.Available.Covers(x.Cost, p.Player))
-            .OrderByDescending(x => x.Health);
+            .Where(x => p.Available.Covers(x.Cost))
+            .OrderByDescending(x => p.Projects.Impact(x.Gain))
+            .ThenByDescending(x => x.Health);
 
         return heldByPlayer;
+    }
+}
+
+public static class Extensions
+{
+    public static int Impact(this MoleculeCollection[] projects, char gain)
+    {
+        return projects.Count(x => x[gain] > 0);
     }
 }
 
