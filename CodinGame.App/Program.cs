@@ -27,24 +27,24 @@ public class GS
 
 public class G
 {
-    private readonly GS _state;
-    private readonly PathFinder _pathFinder;
+    private readonly GS _st;
+    private readonly PF p;
 
-    public G(GS state)
+    public G(GS st)
     {
-        _state = state;
-        _pathFinder = new PathFinder();
+        _st = st;
+        p = new PF();
     }
 
-    public MoveDirection NextMove(string s)
+    public Dir NextMove(string s)
     {
-        var direction = _pathFinder.FindDirection(_state.Thor, _state.Light);
-        _state.Thor = _state.Thor.Move(direction);
-        return direction;
+        var d = p.D(_st.Thor, _st.Light);
+        _st.Thor = _st.Thor.Move(d);
+        return d;
     }
 }
 
-public enum MoveDirection
+public enum Dir
 {
     X, N, NE, E, SE, S, SW, W, NW
 }
@@ -60,46 +60,39 @@ public struct XY
     public int X { get; set; }
     public int Y { get; set; }
 
-    public XY Move(MoveDirection direction)
+    public XY Move(Dir direction)
     {
-        var compass = direction.ToString();
-        var result = new XY(X, Y);
+        var c = direction.ToString();
+        var r = new XY(X, Y);
 
-        if (compass.Contains("N"))
-            result.Y--;
+        if (c.Contains("N")) r.Y--;
+        if (c.Contains("S")) r.Y++;
+        if (c.Contains("E")) r.X++;
+        if (c.Contains("W")) r.X--;
 
-        if (compass.Contains("S"))
-            result.Y++;
-
-        if (compass.Contains("E"))
-            result.X++;
-
-        if (compass.Contains("W"))
-            result.X--;
-
-        return result;
+        return r;
     }
 }
 
-public class PathFinder
+public class PF
 {
-    public MoveDirection FindDirection(XY position, XY target)
+    public Dir D(XY p, XY t)
     {
-        var x = target.X == position.X;
-        var y = target.Y == position.Y;
-        var n = target.Y < position.Y;
-        var e = target.X > position.X;
-        var s = target.Y > position.Y;
-        var w = target.X < position.X;
+        var x = t.X == p.X;
+        var y = t.Y == p.Y;
+        var n = t.Y < p.Y;
+        var e = t.X > p.X;
+        var s = t.Y > p.Y;
+        var w = t.X < p.X;
 
-        if (n && x) return MoveDirection.N;
-        if (n && e) return MoveDirection.NE;
-        if (e && y) return MoveDirection.E;
-        if (s && e) return MoveDirection.SE;
-        if (s && x) return MoveDirection.S;
-        if (s && w) return MoveDirection.SW;
-        if (w && y) return MoveDirection.W;
-        if (w && n) return MoveDirection.NW;
-        return MoveDirection.X;
+        if (n && x) return Dir.N;
+        if (n && e) return Dir.NE;
+        if (e && y) return Dir.E;
+        if (s && e) return Dir.SE;
+        if (s && x) return Dir.S;
+        if (s && w) return Dir.SW;
+        if (w && y) return Dir.W;
+        if (w && n) return Dir.NW;
+        return Dir.X;
     }
 }
