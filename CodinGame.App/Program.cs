@@ -9,7 +9,7 @@ class P
         var g = new G(new GS(L().Split(' ').Select(int.Parse).ToArray()));
 
         while(true)
-            Console.WriteLine(g.NextMove(L()));
+            Console.WriteLine(g.N(L()));
     }
 }
 
@@ -27,19 +27,18 @@ class GS
 
 class G
 {
-    private readonly GS _st;
-    private readonly PF p;
+    private readonly GS st;
+    private readonly PF p = new PF();
 
-    public G(GS st)
+    public G(GS s)
     {
-        _st = st;
-        p = new PF();
+        st = s;
     }
 
-    public Dir NextMove(string s)
+    public Dir N(string s)
     {
-        var d = p.D(_st.Thor, _st.Light);
-        _st.Thor = _st.Thor.Move(d);
+        var d = p.D(st.Thor, st.Light);
+        st.Thor = st.Thor.Move(d);
         return d;
     }
 }
@@ -85,14 +84,14 @@ class PF
         var s = t.Y > p.Y;
         var w = t.X < p.X;
 
-        if (n && x) return Dir.N;
-        if (n && e) return Dir.NE;
-        if (e && y) return Dir.E;
-        if (s && e) return Dir.SE;
-        if (s && x) return Dir.S;
-        if (s && w) return Dir.SW;
-        if (w && y) return Dir.W;
-        if (w && n) return Dir.NW;
+        if (n & x) return Dir.N;
+        if (n & e) return Dir.NE;
+        if (e & y) return Dir.E;
+        if (s & e) return Dir.SE;
+        if (s & x) return Dir.S;
+        if (s & w) return Dir.SW;
+        if (w & y) return Dir.W;
+        if (w & n) return Dir.NW;
         return Dir.X;
     }
 }
