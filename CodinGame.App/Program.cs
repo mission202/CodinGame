@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Linq;
 
-class Player
+class P
 {
-    static void Main(string[] args)
+    static void Main(string[] a)
     {
         Func<string> L = Console.ReadLine;
         var g = new G(new GS(L().Split(' ').Select(int.Parse).ToArray()));
@@ -13,7 +13,7 @@ class Player
     }
 }
 
-public class GS
+class GS
 {
     public readonly XY Light;
     public XY Thor { get; set; }
@@ -25,7 +25,7 @@ public class GS
     }
 }
 
-public class G
+class G
 {
     private readonly GS _st;
     private readonly PF p;
@@ -44,12 +44,12 @@ public class G
     }
 }
 
-public enum Dir
+enum Dir
 {
     X, N, NE, E, SE, S, SW, W, NW
 }
 
-public struct XY
+struct XY
 {
     public XY(int x, int y)
     {
@@ -74,7 +74,7 @@ public struct XY
     }
 }
 
-public class PF
+class PF
 {
     public Dir D(XY p, XY t)
     {
