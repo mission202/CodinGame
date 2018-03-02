@@ -8,11 +8,8 @@ class Player
         Func<string> L = Console.ReadLine;
         var g = new G(new GS(L().Split(' ').Select(int.Parse).ToArray()));
 
-        while (true)
-        {
-            L();
-            Console.WriteLine(g.NextMove());
-        }
+        while(true)
+            Console.WriteLine(g.NextMove(L()));
     }
 }
 
@@ -39,7 +36,7 @@ public class G
         _pathFinder = new PathFinder();
     }
 
-    public MoveDirection NextMove()
+    public MoveDirection NextMove(string s)
     {
         var direction = _pathFinder.FindDirection(_state.Thor, _state.Light);
         _state.Thor = _state.Thor.Move(direction);
@@ -49,7 +46,7 @@ public class G
 
 public enum MoveDirection
 {
-    NoIdea, N, NE, E, SE, S, SW, W, NW
+    X, N, NE, E, SE, S, SW, W, NW
 }
 
 public struct XY
@@ -88,53 +85,21 @@ public class PathFinder
 {
     public MoveDirection FindDirection(XY position, XY target)
     {
-        var sameLatitude = target.X == position.X;
-        var sameLongitude = target.Y == position.Y;
-        var targetToNorth = target.Y < position.Y;
-        var targetToEast = target.X > position.X;
-        var targetToSouth = target.Y > position.Y;
-        var targetToWest = target.X < position.X;
+        var x = target.X == position.X;
+        var y = target.Y == position.Y;
+        var n = target.Y < position.Y;
+        var e = target.X > position.X;
+        var s = target.Y > position.Y;
+        var w = target.X < position.X;
 
-        if (targetToNorth && sameLatitude)
-        {
-            return MoveDirection.N;
-        }
-
-        if (targetToNorth && targetToEast)
-        {
-            return MoveDirection.NE;
-        }
-
-        if (targetToEast && sameLongitude)
-        {
-            return MoveDirection.E;
-        }
-
-        if (targetToSouth && targetToEast)
-        {
-            return MoveDirection.SE;
-        }
-
-        if (targetToSouth && sameLatitude)
-        {
-            return MoveDirection.S;
-        }
-
-        if (targetToSouth && targetToWest)
-        {
-            return MoveDirection.SW;
-        }
-
-        if (targetToWest && sameLongitude)
-        {
-            return MoveDirection.W;
-        }
-
-        if (targetToWest && targetToNorth)
-        {
-            return MoveDirection.NW;
-        }
-
-        return MoveDirection.NoIdea;
+        if (n && x) return MoveDirection.N;
+        if (n && e) return MoveDirection.NE;
+        if (e && y) return MoveDirection.E;
+        if (s && e) return MoveDirection.SE;
+        if (s && x) return MoveDirection.S;
+        if (s && w) return MoveDirection.SW;
+        if (w && y) return MoveDirection.W;
+        if (w && n) return MoveDirection.NW;
+        return MoveDirection.X;
     }
 }
