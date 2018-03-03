@@ -39,6 +39,10 @@ public class GameState
 {
     public int MyTeam { get; private set; }
     public int BushAndSpawnPointCount { get; private set; }
+
+    public int RoundType { get; private set; }
+    public bool IsHeroPickRound => RoundType < 0;
+
     public int PlayerGold { get; private set; }
     public int EnemyGold { get; private set; }
 
@@ -59,10 +63,8 @@ public class GameState
         string input;
         string[] inputs;
         MyTeam = int.Parse(read());
-        Console.Error.WriteLine(MyTeam);
 
         BushAndSpawnPointCount = int.Parse(read()); // usefrul from wood1, represents the number of bushes and the number of places where neutral units can spawn
-        Console.Error.WriteLine(BushAndSpawnPointCount);
         for (int i = 0; i < BushAndSpawnPointCount; i++)
         {
             input = read();
@@ -76,7 +78,6 @@ public class GameState
             int radius = int.Parse(inputs[3]);
         }
         input = read();
-        Console.Error.WriteLine(input);
 
         int itemCount = int.Parse(input); // useful from wood2
         //TODO: Store Items
@@ -119,7 +120,7 @@ public class GameState
         EnemyGold = int.Parse(input);
 
         input = read();
-        int roundType = int.Parse(input); // a positive value will show the number of heroes that await a command
+        RoundType = int.Parse(input); // a positive value will show the number of heroes that await a command
 
         input = read();
         int entityCount = int.Parse(input);
@@ -177,6 +178,9 @@ public class Game
     {
         _gs.Turn();
 
+        if (_gs.IsHeroPickRound)
+            return Actions.Heroes.Valkyrie;
+
         return Actions.Wait.WithMessage("Picking Random Player");
     }
 
@@ -189,6 +193,15 @@ public class Game
 public static class Actions
 {
     public const string Wait = "WAIT";
+
+    public static class Heroes
+    {
+        public const string Deadpool = "DEADPOOL";
+        public const string DoctorStrange = "DOCTOR_STRANGE";
+        public const string Hulk = "HULK";
+        public const string IronMan = "IRONMAN";
+        public const string Valkyrie = "VALKYRIE";
+    }
 
     public static string WithMessage(this string action, string message) => $"{action};{message}";
 }

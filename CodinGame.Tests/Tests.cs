@@ -23,8 +23,10 @@ namespace CodinGame.Tests
                 1 0 TOWER 100 540 400 1500 1500 0 100 0 0 0 0 0 0 0 0 0 - 1 0
                 2 1 TOWER 1820 540 400 1500 1500 0 100 0 0 0 0 0 0 0 0 0 - 1 0"
             .ToGame().Move();
-            Assert.Equal(Actions.Wait, action.IgnoreMessage());
+            Assert.Equal(Actions.Heroes.Valkyrie, action.IgnoreMessage());
         }
+
+        // TODO: Get Valkyrie Moving to Front Line!
     }
 
     internal static class Extensions
