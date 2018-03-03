@@ -18,10 +18,20 @@ class Player
         {
             // If roundType has a negative value then you need to output a Hero name, such as "DEADPOOL" or "VALKYRIE".
             // Else you need to output roundType number of any valid action, such as "WAIT" or "ATTACK unitId"
-            Console.WriteLine(game.Move());
-
-            Console.Error.WriteLine("Game State:");
-            Console.Error.WriteLine(game.Serialise());
+            try
+            {
+                Console.WriteLine(game.Move());
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("== EXCEPTION! ==");
+                Console.Error.WriteLine(ex.ToString());
+            }
+            finally
+            {
+                Console.Error.WriteLine("Game State:");
+                Console.Error.WriteLine(game.Serialise());
+            }
         }
     }
 }
@@ -103,6 +113,7 @@ public class GameState
     public void Turn()
     {
         _turn.Clear();
+        Entities.Clear(); // TODO: Yuck, can't I just update?
 
         Func<string> read = () =>
         {
@@ -187,21 +198,55 @@ public class Game
         _gs.Init();
     }
 
-    // TODO: Get Next Move
-
     public string Move()
     {
         _gs.Turn();
 
         if (_gs.IsHeroPickRound)
-            return Actions.Heroes.Valkyrie;
+            return Actions.Heroes.Hulk;
 
-        var enemyTower = _gs.Entities
-            .Where(x => x.UnitType == Units.TOWER)
-            .Where(x => x.Team != _gs.MyTeam)
-            .First();
+        var attackRange = 95; // For Hulk
 
-        return Actions.Move(enemyTower.X, enemyTower.Y).WithMessage("CHAAARRRGGGEEEE!");
+        var friendly = _gs.Entities.Where(x => x.Team == _gs.MyTeam).ToList();
+        var enemy = _gs.Entities.Where(x => x.Team != _gs.MyTeam).ToList();
+
+        var hero = friendly.OfType<Hero>().Single();
+
+        if (hero.Health < (hero.MaxHealth * 0.1))
+        {
+            var tower = friendly.Where(x => x.UnitType == Units.TOWER).Single();
+            return Actions.Move(tower.X, tower.Y).WithMessage("Licking Wounds");
+        }
+
+        var friendlyUnits = friendly
+            .Where(x => x.UnitType == Units.UNIT)
+            .ToList();
+
+        var enemyFront = _gs.MyTeam == 0 ? enemy.Min(x => x.X) : enemy.Max(x => x.X);
+        var rearLine = _gs.MyTeam == 0 ? friendlyUnits.Min(x => x.X) : friendlyUnits.Max(x => x.X);
+        var drawingClose = _gs.MyTeam == 0
+            ? enemyFront < (rearLine + (attackRange * 4))
+            : enemyFront > (rearLine - (attackRange * 4));
+
+        if (drawingClose)
+        {
+            // Move to Attack
+            var targets = enemy.Where(x => x.X == enemyFront);
+            var heroARL = hero.X - (attackRange * 3);
+            var heroARR = hero.X + (attackRange * 3);
+            if (targets.Any(x => x.UnitType == Units.HERO && (x.X >= heroARL) && (x.X <= heroARR)))
+                return Actions.MoveAttack(targets.First(x => x.UnitType == Units.HERO)).WithMessage("Kill The Hero!");
+
+            var count = targets.Count();
+            var target = targets.Skip(count / 2).First();
+            return Actions.MoveAttack(target).WithMessage("HULK SMASH!");
+        }
+
+        // Stick Close to Troops
+        var verticals = friendlyUnits.Select(x => x.Y).OrderBy(x => x).ToArray();
+        var middle = verticals.First() + ((verticals.Last() - verticals.First()) / 2);
+
+        return Actions.Move(rearLine + attackRange, middle).WithMessage("Support Rear");
     }
 
     public string Serialise()
@@ -268,6 +313,8 @@ public static class Actions
     public const string Wait = "WAIT";
 
     public static string Move(int x, int y) => $"MOVE {x} {y}";
+    public static string MoveAttack(Entity entity) => MoveAttack(entity.X, entity.Y, entity.UnitId);
+    public static string MoveAttack(int x, int y, int id) => $"MOVE_ATTACK {x} {y} {id}";
 
     public static class Heroes
     {
