@@ -30,6 +30,10 @@ namespace CodinGame.Tests
 
         // TODO: Buy Available Items
 
+        // TODO: Get Health Potions if Licking Wounds!
+
+        // TODO: Add Skill Support - Thankfully Last Rule Change!
+
         // Multiple Heroes - Going to BORK Tests!
         /* == Hero AI ==
          * Golddigga: Attack to get the most gold available:

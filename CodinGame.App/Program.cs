@@ -59,7 +59,7 @@ public class GameState
     public List<Item> Items { get; } = new List<Item>();
 
     private int _carrying = 0;
-    public int ItemsSlotsAvailable => 4 - _carrying;
+    public int ItemsSlotsAvailable => Consts.MAX_ITEMS - _carrying;
 
     protected Func<string> _inputSource = Console.ReadLine;
 
@@ -236,14 +236,20 @@ public class Game
 
             if (hero.Health < (hero.MaxHealth * 0.1))
             {
-                var tower = friendly.Where(x => x.UnitType == Units.TOWER).Single();
-                response.Add(Actions.Move(tower.X, tower.Y).WithMessage("Licking Wounds"));
+                response.Add(new HealingUp(hero, _gs).Move());
                 continue;
             }
 
             var friendlyUnits = friendly
                 .Where(x => x.UnitType == Units.UNIT)
                 .ToList();
+
+            if (!friendlyUnits.Any())
+            {
+                var tower = friendly.Where(x => x.UnitType == Units.TOWER).Single();
+                response.Add(Actions.Move(tower.X, tower.Y).WithMessage("Retreat!"));
+                continue;
+            }
 
             const int scanRange = 2;
             var enemyFront = _gs.MyTeam == 0 ? enemy.Min(x => x.X) : enemy.Max(x => x.X);
@@ -298,6 +304,50 @@ public static class Extensions
     }
 }
 
+public abstract class AI
+{
+    protected readonly Hero Hero;
+    protected readonly GameState State;
+
+    public abstract string Move();
+
+    protected AI(Hero hero, GameState state)
+    {
+        Hero = hero;
+        State = state;
+    }
+}
+
+public class HealingUp : AI
+{
+    public HealingUp(Hero hero, GameState state) : base(hero, state)
+    {
+
+    }
+
+    public override string Move()
+    {
+        var need = Hero.MaxHealth - Hero.Health;
+        if (Hero.Attribs.ItemsOwned < Consts.MAX_ITEMS)
+        {
+            var potion = State.Items
+                .Affordable(State.PlayerGold)
+                .Where(x => x.Health > 0 && x.Health < need)
+                .OrderByDescending(x => x.Health)
+                .FirstOrDefault();
+
+            if (potion != null)
+                return Actions.Buy(potion).WithMessage("YOU ARE HEALLLED!");
+        }
+
+        // TODO: Sell Item?
+
+        var friendly = State.Entities.Where(x => x.Team == State.MyTeam).ToList();
+        var tower = friendly.Where(x => x.UnitType == Units.TOWER).Single();
+        return Actions.Move(tower.X, tower.Y).WithMessage("Licking Wounds");
+    }
+}
+
 public class Entity
 {
     public int UnitId { get; private set; }
@@ -334,7 +384,7 @@ public class Entity
 
 public class Hero : Entity
 {
-    public Attributes Attribs { get ; private set;}
+    public Attributes Attribs { get; private set; }
 
     public Hero(int unitId, int team, int x, int y, int attackRange, int health, int maxHealth, int shield, int attackDamage, int movementSpeed, int stunDuration, int goldValue, Attributes heroAttribs)
         : base(unitId, team, Units.HERO, x, y, attackRange, health, maxHealth, shield, attackRange, movementSpeed, stunDuration, goldValue)
@@ -408,6 +458,7 @@ public static class Actions
     public static string MoveAttack(int x, int y, int id) => $"MOVE_ATTACK {x} {y} {id}";
     public static string AttackNearest(string unit) => $"ATTACK_NEAREST {unit}";
     public static string Buy(string item) => $"BUY {item}";
+    public static string Buy(Item item) => Buy(item.Name);
     public static string Sell(string item) => $"SELL {item}";
     public static string WithMessage(this string action, string message) => $"{action};{message}";
 }
@@ -450,4 +501,9 @@ public static class Units
     public const string HERO = "HERO";
     public const string TOWER = "TOWER";
     public const string GROOT = "GROOT";
+}
+
+public static class Consts
+{
+    public const int MAX_ITEMS = 4;
 }
