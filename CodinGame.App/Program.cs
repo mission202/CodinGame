@@ -230,9 +230,19 @@ public class Game
             var attackRange = controlledHero.Range;
 
             var friendly = _gs.Entities.Where(x => x.Team == _gs.MyTeam).ToList();
-            var enemy = _gs.Entities.Where(x => x.Team != _gs.MyTeam).ToList();
+            var enemy = _gs.Entities
+                .Where(x => x.Team != _gs.MyTeam)
+                .Where(x => x.UnitType != Units.GROOT)
+                .ToList();
 
-            var hero = friendly.OfType<Hero>().Where(x => x.Attribs.HeroType == controlledHero.Name).Single();
+            // TODO: Only attack Groots for fundraising efforts.
+
+            var hero = friendly.OfType<Hero>().Where(x => x.Attribs.HeroType == controlledHero.Name).SingleOrDefault();
+            if (hero == null)
+            {
+                response.Add(Actions.Wait.WithMessage($"RIP {hero.Attribs.HeroType} :'("));
+                continue;
+            }
 
             if (hero.Health < (hero.MaxHealth * 0.1))
             {
