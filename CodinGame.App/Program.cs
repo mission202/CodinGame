@@ -238,7 +238,7 @@ public class Game
             var hero = friendly.OfType<Hero>().Where(x => x.Attribs.HeroType == controlledHero.Name).SingleOrDefault();
             if (hero == null)
             {
-                response.Add(Actions.Wait.WithMessage($"RIP {hero.Attribs.HeroType} :'("));
+                response.Add(Actions.Wait.WithMessage($"RIP {controlledHero} :'("));
                 continue;
             }
 
@@ -254,8 +254,7 @@ public class Game
 
             if (!friendlyUnits.Any())
             {
-                var tower = friendly.Where(x => x.UnitType == Units.TOWER).Single();
-                response.Add(Actions.Move(tower.X, tower.Y).WithMessage("Retreat!"));
+                response.Add(new Retreat(hero, _gs).Move());
                 continue;
             }
 
@@ -304,29 +303,7 @@ public class Game
     }
 }
 
-public static class Extensions
-{
-    public static IEnumerable<Item> Affordable(this IEnumerable<Item> items, int gold)
-    {
-        return items.Where(x => x.Cost <= gold);
-    }
-}
-
-public abstract class AI
-{
-    protected readonly Hero Hero;
-    protected readonly GameState State;
-
-    public abstract string Move();
-
-    protected AI(Hero hero, GameState state)
-    {
-        Hero = hero;
-        State = state;
-    }
-}
-
-public class HealingUp : AI
+public class HealingUp : StrategicMove
 {
     public HealingUp(Hero hero, GameState state) : base(hero, state)
     {
@@ -348,11 +325,44 @@ public class HealingUp : AI
                 return Actions.Buy(potion).WithMessage("YOU ARE HEALLLED!");
         }
 
-        // TODO: Sell Item?
+        // TODO: Sell Item to make space?
+
+        // TODO: Consider attacking at range?
 
         var friendly = State.Entities.Where(x => x.Team == State.MyTeam).ToList();
         var tower = friendly.Where(x => x.UnitType == Units.TOWER).Single();
         return Actions.Move(tower.X, tower.Y).WithMessage("Licking Wounds");
+    }
+}
+
+public class Retreat : StrategicMove
+{
+    public Retreat(Hero hero, GameState state) : base(hero, state)
+    {
+
+    }
+
+    public override string Move()
+    {
+        var friendly = State.Entities.Where(x => x.Team == State.MyTeam).ToList();
+        var tower = friendly.Where(x => x.UnitType == Units.TOWER).Single();
+        return Actions.Move(tower.X, tower.Y).WithMessage("Retreat!");
+    }
+}
+
+#region Domain Objects
+
+public abstract class StrategicMove
+{
+    protected readonly Hero Hero;
+    protected readonly GameState State;
+
+    public abstract string Move();
+
+    protected StrategicMove(Hero hero, GameState state)
+    {
+        Hero = hero;
+        State = state;
     }
 }
 
@@ -457,6 +467,39 @@ public class Item
     }
 }
 
+public class HeroStats
+{
+    public string Name { get; private set; }
+    public int Range { get; private set; }
+
+    public HeroStats(string name, int range)
+    {
+        Name = name;
+        Range = range;
+    }
+}
+
+public static class Units
+{
+    // UNIT, HERO, TOWER, can also be GROOT from wood1
+    public const string UNIT = "UNIT";
+    public const string HERO = "HERO";
+    public const string TOWER = "TOWER";
+    public const string GROOT = "GROOT";
+}
+
+#endregion
+
+public static class Extensions
+{
+    public static IEnumerable<Item> Affordable(this IEnumerable<Item> items, int gold)
+    {
+        return items.Where(x => x.Cost <= gold);
+    }
+}
+
+#region Consts / Action Helpers
+
 public static class Actions
 {
     public const string Wait = "WAIT";
@@ -490,28 +533,9 @@ public static class Heroes
     public static HeroStats Ironman => _heroes["IRONMAN"];
 }
 
-public class HeroStats
-{
-    public string Name { get; private set; }
-    public int Range { get; private set; }
-
-    public HeroStats(string name, int range)
-    {
-        Name = name;
-        Range = range;
-    }
-}
-
-public static class Units
-{
-    // UNIT, HERO, TOWER, can also be GROOT from wood1
-    public const string UNIT = "UNIT";
-    public const string HERO = "HERO";
-    public const string TOWER = "TOWER";
-    public const string GROOT = "GROOT";
-}
-
 public static class Consts
 {
     public const int MAX_ITEMS = 4;
 }
+
+#endregion

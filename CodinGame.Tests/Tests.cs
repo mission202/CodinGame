@@ -39,7 +39,15 @@ namespace CodinGame.Tests
          *  50 Ranged Unit
          *  30 Melee Unit
          *
+         *  Good strategy might be to use HULK and BASH Groots until we've enough cash?
+         *
+         *  TODO Consider Invisiblity/Ghost Strategy
+         *  - The turn after a visible hero enters a bush they become invisible if no enemy hero shares the same hiding spot.
+         *  - Invisible heroes are not targetable by attacks nor by single target skills. Their information will be available in the input on the next round, but not the ones following after, if they stay invisible.
+         *  - Invisibility is lost when the hero attacks an enemy unit, hero or tower or when an enemy hero enters the same bush area. Invisibility is not lost if the hero attacks a neutral unit.
+         *
          */
+
 
     }
 
