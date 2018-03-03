@@ -29,8 +29,11 @@ class Player
             }
             finally
             {
-                Console.Error.WriteLine("Game State:");
-                Console.Error.WriteLine(game.Serialise());
+                if (false)
+                {
+                    Console.Error.WriteLine("Game State:");
+                    Console.Error.WriteLine(game.Serialise());
+                }
             }
         }
     }
@@ -66,6 +69,7 @@ public class GameState
 
     private readonly Queue<string> _init = new Queue<string>();
     private readonly Queue<string> _turn = new Queue<string>();
+    private readonly Dictionary<string, string> _stateBag = new Dictionary<string, string>();
 
     public void Init()
     {
@@ -84,7 +88,6 @@ public class GameState
         for (int i = 0; i < BushAndSpawnPointCount; i++)
         {
             input = read();
-            Console.Error.WriteLine(input);
             inputs = input.Split(' ');
 
             // TODO: Store Entities
@@ -188,6 +191,25 @@ public class GameState
         PlayerGold -= item.Cost;
         return Actions.Buy(item.Name).WithMessage("Retail Therapy");
     }
+
+    public void SetState(string key, string value)
+    {
+        if (_stateBag.ContainsKey(key))
+        {
+            _stateBag[key] = value;
+        }
+        else
+        {
+            _stateBag.Add(key, value);
+        }
+    }
+
+    public string GetState(string key)
+    {
+        return _stateBag.ContainsKey(key)
+            ? _stateBag[key]
+            : string.Empty;
+    }
 }
 
 public class Game
@@ -204,6 +226,8 @@ public class Game
 
         _myHeroes = new[] { Heroes.Hulk, Heroes.Ironman };
         _toPick = new Queue<string>(_myHeroes.Select(x => x.Name));
+
+        // TODO: Store IDs to Common Entities (e.g. Heroes, Towers etc.)
     }
 
     public string[] Moves()
@@ -238,14 +262,25 @@ public class Game
             var hero = friendly.OfType<Hero>().Where(x => x.Attribs.HeroType == controlledHero.Name).SingleOrDefault();
             if (hero == null)
             {
-                response.Add(Actions.Wait.WithMessage($"RIP {controlledHero} :'("));
+                Console.Error.WriteLine($"RIP {controlledHero.Name} :'(");
                 continue;
             }
 
-            if (hero.Health < (hero.MaxHealth * 0.1))
+            var selfPreservation = new StayAlive(hero, _gs).Move();
+            if (!string.IsNullOrWhiteSpace(selfPreservation))
             {
-                response.Add(new HealingUp(hero, _gs).Move());
+                response.Add(selfPreservation);
                 continue;
+            }
+
+            if (hero.Attribs.HeroType == "HULK")
+            {
+                var smashy = new Tanking(hero, _gs).Move();
+                if (!string.IsNullOrWhiteSpace(smashy))
+                {
+                    response.Add(smashy);
+                    continue;
+                }
             }
 
             var friendlyUnits = friendly
@@ -270,7 +305,7 @@ public class Game
             {
                 var target = enemy
                     .Where(x => x.X == enemyFront)
-                    .OrderByDescending(x => x.GoldValue).First();
+                    .OrderByDescending(x => x.AttackDamage).First();
                 response.Add(Actions.AttackNearest(target.UnitType).WithMessage($"Target : {target.UnitType}"));
                 continue;
             }
@@ -297,24 +332,42 @@ public class Game
 
         return _gs
             .Items
+            .Where(x => !x.IsInstant)
             .Affordable(_gs.PlayerGold)
             .OrderByDescending(x => x.Damage)
             .FirstOrDefault();
     }
 }
 
-public class HealingUp : StrategicMove
+public class StayAlive : StrategicMove
 {
-    public HealingUp(Hero hero, GameState state) : base(hero, state)
+    public StayAlive(Hero hero, GameState state) : base(hero, state)
     {
 
     }
 
     public override string Move()
     {
-        var need = Hero.MaxHealth - Hero.Health;
+        var threat = State.Entities
+            .Where(x => !x.IsNeutral)
+            .Where(x => x.Team != State.MyTeam)
+            .Where(x => x.Distance(Hero) <= x.AttackRange * 2)
+            .Sum(x => x.AttackDamage);
+
+        var safe = Hero.Health > (threat * 1.1);
+
+        Console.Error.WriteLine($"{Hero.Attribs.HeroType} Health: {Hero.Health} - Threat: {threat} Safe? {safe}");
+
+        if (safe) return string.Empty;
+
+        var tower = State.Entities.Where(x => x.Team == State.MyTeam).Where(x => x.UnitType == Units.TOWER).Single();
+
+        if (threat * 2 > Hero.Health) // RUUUUN!
+            return Actions.Move(tower.X, tower.Y).WithMessage("Overpowered!");
+
         if (Hero.Attribs.ItemsOwned < Consts.MAX_ITEMS)
         {
+            var need = Hero.MaxHealth - Hero.Health;
             var potion = State.Items
                 .Affordable(State.PlayerGold)
                 .Where(x => x.Health > 0 && x.Health < need)
@@ -322,16 +375,70 @@ public class HealingUp : StrategicMove
                 .FirstOrDefault();
 
             if (potion != null)
-                return Actions.Buy(potion).WithMessage("YOU ARE HEALLLED!");
+                return Actions.Buy(potion).WithMessage("Healed Via Potion!");
         }
 
         // TODO: Sell Item to make space?
-
         // TODO: Consider attacking at range?
 
-        var friendly = State.Entities.Where(x => x.Team == State.MyTeam).ToList();
-        var tower = friendly.Where(x => x.UnitType == Units.TOWER).Single();
-        return Actions.Move(tower.X, tower.Y).WithMessage("Licking Wounds");
+        return Actions.Move(tower.X, tower.Y).WithMessage("Out of Game");
+    }
+}
+
+public class Tanking : StrategicMove
+{
+    public Tanking(Hero hero, GameState state) : base(hero, state)
+    {
+
+    }
+
+    public override string Move()
+    {
+        var byDistance = State.Entities
+            .Where(x => !x.IsNeutral)
+            .Where(x => x.Team != State.MyTeam)
+            .OrderBy(x => x.Distance(Hero));
+
+        var closest = byDistance.FirstOrDefault();
+
+        // Charge!
+        if (closest == null || closest.Distance(Hero) > 500) return string.Empty;
+
+        if (closest.Distance(Hero) < Hero.AttackRange)
+        {
+            var threatCount = byDistance.Where(x => x.Distance(Hero) < x.AttackRange).Count();
+
+            if (threatCount > 2)
+            {
+                var shieldState = int.TryParse(State.GetState("HULK_SHIELD"), out var shieldCD);
+                if (shieldState)
+                {
+                    if (shieldCD > 1)
+                    {
+                        State.SetState("HULK_SHIELD", (--shieldCD).ToString());
+                        return Actions.MoveAttack(closest);
+                    }
+                }
+
+                State.SetState("HULK_SHIELD", "8");
+                return $"EXPLOSIVESHIELD";
+            }
+
+            return Actions.MoveAttack(closest);
+        }
+
+        var inState = int.TryParse(State.GetState("HULK_CHARGE"), out var coolDown);
+        if (inState)
+        {
+            if (coolDown > 1)
+            {
+                State.SetState("HULK_CHARGE", (--coolDown).ToString());
+                return Actions.MoveAttack(closest).WithMessage($"HULK COOLING {coolDown}");
+            }
+        }
+
+        State.SetState("HULK_CHARGE", "8");
+        return $"CHARGE {closest.UnitId}".WithMessage($"HULK GET {closest.UnitType} {closest.UnitId}!");
     }
 }
 
@@ -370,6 +477,7 @@ public class Entity
 {
     public int UnitId { get; private set; }
     public int Team { get; private set; }
+    public bool IsNeutral => Team == -1;
     public string UnitType { get; private set; }
     public int X { get; private set; }
     public int Y { get; private set; }
@@ -495,6 +603,11 @@ public static class Extensions
     public static IEnumerable<Item> Affordable(this IEnumerable<Item> items, int gold)
     {
         return items.Where(x => x.Cost <= gold);
+    }
+
+    public static int Distance(this Entity a, Entity b)
+    {
+        return (int)Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(b.Y - a.Y, 2));
     }
 }
 
