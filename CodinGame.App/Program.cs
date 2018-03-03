@@ -18,7 +18,9 @@ class Player
         {
             try
             {
-                Console.WriteLine(game.Move());
+                var moves = game.Moves();
+                foreach (var move in moves)
+                    Console.WriteLine(move);
             }
             catch (Exception ex)
             {
@@ -160,7 +162,8 @@ public class GameState
             switch (unitType)
             {
                 case Units.HERO:
-                    entity = new Hero(unitId, team, x, y, attackRange, health, maxHealth, shield, attackDamage, movementSpeed, stunDuration, goldValue);
+                    entity = new Hero(unitId, team, x, y, attackRange, health, maxHealth, shield, attackDamage, movementSpeed, stunDuration, goldValue,
+                        new Hero.Attributes(countDown1, countDown2, countDown3, mana, maxMana, manaRegeneration, heroType, isVisible, itemsOwned));
                     break;
                 default:
                     entity = new Entity(unitId, team, unitType, x, y, attackRange, health, maxHealth, shield, attackDamage, movementSpeed, stunDuration, goldValue);
@@ -182,6 +185,7 @@ public class GameState
     public string Buy(Item item)
     {
         _carrying++;
+        PlayerGold -= item.Cost;
         return Actions.Buy(item.Name).WithMessage("Retail Therapy");
     }
 }
@@ -190,61 +194,83 @@ public class Game
 {
     private readonly GameState _gs;
 
+    private HeroStats[] _myHeroes;
+    private Queue<string> _toPick;
+
     public Game(GameState gs = null)
     {
         _gs = gs ?? new GameState();
         _gs.Init();
+
+        _myHeroes = new[] { Heroes.Hulk, Heroes.Ironman };
+        _toPick = new Queue<string>(_myHeroes.Select(x => x.Name));
     }
 
-    public string Move()
+    public string[] Moves()
     {
         _gs.Turn();
 
+        // TODO: Create Basic "AI" for 2x Heroes
+
+        // TODO: Heroes should be in GS.
         if (_gs.IsHeroPickRound)
-            return Actions.Heroes.Ironman.Name;
+            return new[] { _toPick.Dequeue() };
 
-        var shopping = ItemWorthBuying();
-        if (shopping != null)
-            return _gs.Buy(shopping);
+        var response = new List<string>();
 
-        var attackRange = Actions.Heroes.Ironman.Range;
-
-        var friendly = _gs.Entities.Where(x => x.Team == _gs.MyTeam).ToList();
-        var enemy = _gs.Entities.Where(x => x.Team != _gs.MyTeam).ToList();
-
-        var hero = friendly.OfType<Hero>().Single();
-
-        if (hero.Health < (hero.MaxHealth * 0.1))
+        foreach (var controlledHero in _myHeroes)
         {
-            var tower = friendly.Where(x => x.UnitType == Units.TOWER).Single();
-            return Actions.Move(tower.X, tower.Y).WithMessage("Licking Wounds");
+            var shopping = ItemWorthBuying();
+            if (shopping != null)
+            {
+                response.Add(_gs.Buy(shopping));
+                continue;
+            }
+
+            var attackRange = controlledHero.Range;
+
+            var friendly = _gs.Entities.Where(x => x.Team == _gs.MyTeam).ToList();
+            var enemy = _gs.Entities.Where(x => x.Team != _gs.MyTeam).ToList();
+
+            var hero = friendly.OfType<Hero>().Where(x => x.Attribs.HeroType == controlledHero.Name).Single();
+
+            if (hero.Health < (hero.MaxHealth * 0.1))
+            {
+                var tower = friendly.Where(x => x.UnitType == Units.TOWER).Single();
+                response.Add(Actions.Move(tower.X, tower.Y).WithMessage("Licking Wounds"));
+                continue;
+            }
+
+            var friendlyUnits = friendly
+                .Where(x => x.UnitType == Units.UNIT)
+                .ToList();
+
+            const int scanRange = 2;
+            var enemyFront = _gs.MyTeam == 0 ? enemy.Min(x => x.X) : enemy.Max(x => x.X);
+            var rabble = (int)friendlyUnits.Average(x => x.X);
+
+            var drawingClose = _gs.MyTeam == 0
+                ? enemyFront < (rabble + (attackRange * scanRange))
+                : enemyFront > (rabble - (attackRange * scanRange));
+
+            if (drawingClose)
+            {
+                var target = enemy
+                    .Where(x => x.X == enemyFront)
+                    .OrderByDescending(x => x.GoldValue).First();
+                response.Add(Actions.AttackNearest(target.UnitType).WithMessage($"Target : {target.UnitType}"));
+                continue;
+            }
+
+            // Stick Close to Troops
+            var verticals = friendlyUnits.Select(x => x.Y).OrderBy(x => x).ToArray();
+            var middle = verticals.First() + ((verticals.Last() - verticals.First()) / 2);
+            var xPos = _gs.MyTeam == 0 ? rabble + (attackRange / 2) : rabble + (attackRange / 2);
+            response.Add(Actions.Move(xPos, middle).WithMessage("HOLD THE LINE"));
+            continue;
         }
 
-        var friendlyUnits = friendly
-            .Where(x => x.UnitType == Units.UNIT)
-            .ToList();
-
-        const int scanRange = 2;
-        var enemyFront = _gs.MyTeam == 0 ? enemy.Min(x => x.X) : enemy.Max(x => x.X);
-        var rabble = (int)friendlyUnits.Average(x => x.X);
-
-        var drawingClose = _gs.MyTeam == 0
-            ? enemyFront < (rabble + (attackRange * scanRange))
-            : enemyFront > (rabble - (attackRange * scanRange));
-
-        if (drawingClose)
-        {
-            var target = enemy
-                .Where(x => x.X == enemyFront)
-                .OrderByDescending(x => x.GoldValue).First();
-            return Actions.AttackNearest(target.UnitType).WithMessage($"Target : {target.UnitType}");
-        }
-
-        // Stick Close to Troops
-        var verticals = friendlyUnits.Select(x => x.Y).OrderBy(x => x).ToArray();
-        var middle = verticals.First() + ((verticals.Last() - verticals.First()) / 2);
-        var xPos = _gs.MyTeam == 0 ? rabble + (attackRange / 2) : rabble + (attackRange / 2);
-        return Actions.Move(xPos, middle).WithMessage("HOLD THE LINE");
+        return response.ToArray();
     }
 
     public string Serialise()
@@ -308,20 +334,38 @@ public class Entity
 
 public class Hero : Entity
 {
-    public int Countdown1 { get; private set; }
-    public int Countdown2 { get; private set; }
-    public int Countdown3 { get; private set; }
-    public int Mana { get; private set; }
-    public int MaxMana { get; private set; }
-    public int ManaRegeneration { get; private set; }
-    public string HeroType { get; private set; }
-    public int IsVisible { get; private set; }
-    public int ItemsOwned { get; private set; }
+    public Attributes Attribs { get ; private set;}
 
-    public Hero(int unitId, int team, int x, int y, int attackRange, int health, int maxHealth, int shield, int attackDamage, int movementSpeed, int stunDuration, int goldValue)
+    public Hero(int unitId, int team, int x, int y, int attackRange, int health, int maxHealth, int shield, int attackDamage, int movementSpeed, int stunDuration, int goldValue, Attributes heroAttribs)
         : base(unitId, team, Units.HERO, x, y, attackRange, health, maxHealth, shield, attackRange, movementSpeed, stunDuration, goldValue)
     {
+        Attribs = heroAttribs;
+    }
 
+    public class Attributes
+    {
+        public int Countdown1 { get; private set; }
+        public int Countdown2 { get; private set; }
+        public int Countdown3 { get; private set; }
+        public int Mana { get; private set; }
+        public int MaxMana { get; private set; }
+        public int ManaRegeneration { get; private set; }
+        public string HeroType { get; private set; }
+        public int IsVisible { get; private set; }
+        public int ItemsOwned { get; private set; }
+
+        public Attributes(int countDown1, int countDown2, int countDown3, int mana, int maxMana, int manaRegeneration, string heroType, int isVisible, int itemsOwned)
+        {
+            Countdown1 = countDown1;
+            Countdown2 = countDown2;
+            Countdown3 = countDown3;
+            Mana = mana;
+            MaxMana = maxMana;
+            ManaRegeneration = manaRegeneration;
+            HeroType = heroType;
+            IsVisible = isVisible;
+            ItemsOwned = itemsOwned;
+        }
     }
 }
 
@@ -365,22 +409,38 @@ public static class Actions
     public static string AttackNearest(string unit) => $"ATTACK_NEAREST {unit}";
     public static string Buy(string item) => $"BUY {item}";
     public static string Sell(string item) => $"SELL {item}";
-
-    public static class Heroes
-    {
-        public const string Deadpool = "DEADPOOL";
-        public const string DoctorStrange = "DOCTOR_STRANGE";
-        public const string Hulk = "HULK";
-        public const string Valkyrie = "VALKYRIE";
-
-        public static class Ironman
-        {
-            public const string Name = "IRONMAN";
-            public const int Range = 270;
-        }
-    }
-
     public static string WithMessage(this string action, string message) => $"{action};{message}";
+}
+
+public static class Heroes
+{
+    public const string Deadpool = "DEADPOOL";
+    public const string DoctorStrange = "DOCTOR_STRANGE";
+    public const string Valkyrie = "VALKYRIE";
+
+    private static readonly Dictionary<string, HeroStats> _heroes = new Dictionary<string, HeroStats>
+    {
+        // TODO: Deadpool
+        // TODO: Dr Strange
+        { "HULK", new HeroStats("HULK", 95) },
+        { "IRONMAN", new HeroStats("IRONMAN", 270) },
+        // TODO: Valkyrie
+    };
+
+    public static HeroStats Hulk => _heroes["HULK"];
+    public static HeroStats Ironman => _heroes["IRONMAN"];
+}
+
+public class HeroStats
+{
+    public string Name { get; private set; }
+    public int Range { get; private set; }
+
+    public HeroStats(string name, int range)
+    {
+        Name = name;
+        Range = range;
+    }
 }
 
 public static class Units
