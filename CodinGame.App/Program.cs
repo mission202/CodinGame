@@ -45,6 +45,7 @@ public class GameState
 
     public int PlayerGold { get; private set; }
     public int EnemyGold { get; private set; }
+    public List<Entity> Entities { get; } = new List<Entity>();
 
     protected Func<string> _inputSource = Console.ReadLine;
 
@@ -150,6 +151,20 @@ public class GameState
             string heroType = inputs[19]; // DEADPOOL, VALKYRIE, DOCTOR_STRANGE, HULK, IRONMAN
             int isVisible = int.Parse(inputs[20]); // 0 if it isn't
             int itemsOwned = int.Parse(inputs[21]); // useful from wood1
+
+            Entity entity;
+
+            switch (unitType)
+            {
+                case Units.HERO:
+                    entity = new Hero(unitId, team, x, y, attackRange, health, maxHealth, shield, attackDamage, movementSpeed, stunDuration, goldValue);
+                    break;
+                default:
+                    entity = new Entity(unitId, team, unitType, x, y, attackRange, health, maxHealth, shield, attackDamage, movementSpeed, stunDuration, goldValue);
+                    break;
+            }
+
+            Entities.Add(entity);
         }
     }
 
@@ -181,7 +196,12 @@ public class Game
         if (_gs.IsHeroPickRound)
             return Actions.Heroes.Valkyrie;
 
-        return Actions.Wait.WithMessage("Picking Random Player");
+        var enemyTower = _gs.Entities
+            .Where(x => x.UnitType == Units.TOWER)
+            .Where(x => x.Team != _gs.MyTeam)
+            .First();
+
+        return Actions.Move(enemyTower.X, enemyTower.Y).WithMessage("CHAAARRRGGGEEEE!");
     }
 
     public string Serialise()
@@ -190,9 +210,64 @@ public class Game
     }
 }
 
+public class Entity
+{
+    public int UnitId { get; private set; }
+    public int Team { get; private set; }
+    public string UnitType { get; private set; }
+    public int X { get; private set; }
+    public int Y { get; private set; }
+    public int AttackRange { get; private set; }
+    public int Health { get; private set; }
+    public int MaxHealth { get; private set; }
+    public int Shield { get; private set; }
+    public int AttackDamage { get; private set; }
+    public int MovementSpeed { get; private set; }
+    public int StunDuration { get; private set; }
+    public int GoldValue { get; private set; }
+
+    public Entity(int unitId, int team, string unitType, int x, int y, int attackRange, int health, int maxHealth, int shield, int attackDamage, int movementSpeed, int stunDuration, int goldValue)
+    {
+        UnitId = unitId;
+        Team = team;
+        UnitType = unitType;
+        X = x;
+        Y = y;
+        AttackRange = attackRange;
+        Health = health;
+        MaxHealth = maxHealth;
+        Shield = shield;
+        AttackDamage = attackDamage;
+        MovementSpeed = movementSpeed;
+        StunDuration = stunDuration;
+        GoldValue = goldValue;
+    }
+}
+
+public class Hero : Entity
+{
+    public int Countdown1 { get; private set; }
+    public int Countdown2 { get; private set; }
+    public int Countdown3 { get; private set; }
+    public int Mana { get; private set; }
+    public int MaxMana { get; private set; }
+    public int ManaRegeneration { get; private set; }
+    public string HeroType { get; private set; }
+    public int IsVisible { get; private set; }
+    public int ItemsOwned { get; private set; }
+
+    public Hero(int unitId, int team, int x, int y, int attackRange, int health, int maxHealth, int shield, int attackDamage, int movementSpeed, int stunDuration, int goldValue)
+        : base(unitId, team, Units.HERO, x, y, attackRange, health, maxHealth, shield, attackRange, movementSpeed, stunDuration, goldValue)
+    {
+
+    }
+}
+
 public static class Actions
 {
     public const string Wait = "WAIT";
+
+    public static string Move(int x, int y) => $"MOVE {x} {y}";
 
     public static class Heroes
     {
@@ -204,4 +279,13 @@ public static class Actions
     }
 
     public static string WithMessage(this string action, string message) => $"{action};{message}";
+}
+
+public static class Units
+{
+    // UNIT, HERO, TOWER, can also be GROOT from wood1
+    public const string UNIT = "UNIT";
+    public const string HERO = "HERO";
+    public const string TOWER = "TOWER";
+    public const string GROOT = "GROOT";
 }
