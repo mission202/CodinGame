@@ -231,11 +231,11 @@ public class Game
 
         var ironMan = new List<StrategicMove>
         {
-            new StayAlive()
+            new StayAlive(scaredyCat: true)
         };
 
         _strategies.Add("HULK", hulk);
-        _strategies.Add("IRONMAN", hulk);
+        _strategies.Add("IRONMAN", ironMan);
 
         _toPick = new Queue<string>(_strategies.Keys);
 
@@ -351,24 +351,34 @@ public class DefaultAction : StrategicMove
 
 public class StayAlive : StrategicMove
 {
+    private readonly bool _isPussy;
+
+    public StayAlive(bool scaredyCat = false)
+    {
+        _isPussy = scaredyCat;
+    }
+
     public override string Move(Hero hero, GameState state)
     {
         var threat = state.Entities
             .Where(x => !x.IsNeutral)
             .Where(x => x.Team != state.MyTeam)
-            .Where(x => x.Distance(hero) <= x.AttackRange * 2)
+            .Where(x => x.Distance(hero) <= x.AttackRange)
             .Sum(x => x.AttackDamage);
 
-        var safe = hero.Health > (threat * 1.1);
+        var fear = _isPussy
+            ? threat * 2
+            : threat * 1.1;
 
-        Console.Error.WriteLine($"{hero.Attribs.HeroType} Health: {hero.Health} - Threat: {threat} Safe? {safe}");
+        var safe = hero.Health > fear;
+
+        Console.Error.WriteLine($"{hero.Attribs.HeroType} Pussy? {_isPussy} Health: {hero.Health} - Threat: {threat} Safe? {safe}");
 
         if (safe) return string.Empty;
 
         var tower = state.Entities.Where(x => x.Team == state.MyTeam).Where(x => x.UnitType == Units.TOWER).Single();
 
-        if (threat * 2 > hero.Health) // RUUUUN!
-            return Actions.Move(tower.X, tower.Y).WithMessage("Overpowered!");
+
 
         if (hero.Attribs.ItemsOwned < Consts.MAX_ITEMS)
         {
