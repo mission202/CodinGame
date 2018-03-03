@@ -24,15 +24,15 @@ class Player
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine("== EXCEPTION! ==");
-                Console.Error.WriteLine(ex.ToString());
+                D.WL("== EXCEPTION! ==");
+                D.WL(ex.ToString());
             }
             finally
             {
                 if (false)
                 {
-                    Console.Error.WriteLine("Game State:");
-                    Console.Error.WriteLine(game.Serialise());
+                    D.WL("Game State:");
+                    D.WL(game.Serialise());
                 }
             }
         }
@@ -266,7 +266,7 @@ public class Game
             var hero = friendly.OfType<Hero>().Where(x => x.Attribs.HeroType == controlledHero).SingleOrDefault();
             if (hero == null)
             {
-                Console.Error.WriteLine($"RIP {controlledHero} :'(");
+                D.WL($"RIP {controlledHero} :'(");
                 continue;
             }
 
@@ -372,13 +372,9 @@ public class StayAlive : StrategicMove
 
         var safe = hero.Health > fear;
 
-        Console.Error.WriteLine($"{hero.Attribs.HeroType} Pussy? {_isPussy} Health: {hero.Health} - Threat: {threat} Safe? {safe}");
+        D.WL($"(StayAlive): {hero.Attribs.HeroType} Pussy? {_isPussy} Health: {hero.Health} - Threat: {threat} Safe? {safe}");
 
         if (safe) return string.Empty;
-
-        var tower = state.Entities.Where(x => x.Team == state.MyTeam).Where(x => x.UnitType == Units.TOWER).Single();
-
-
 
         if (hero.Attribs.ItemsOwned < Consts.MAX_ITEMS)
         {
@@ -396,6 +392,7 @@ public class StayAlive : StrategicMove
         // TODO: Sell Item to make space?
         // TODO: Consider attacking at range?
 
+        var tower = state.Entities.Where(x => x.Team == state.MyTeam).Where(x => x.UnitType == Units.TOWER).Single();
         return Actions.Move(tower.X, tower.Y).WithMessage("Out of Game");
     }
 }
@@ -607,7 +604,11 @@ public static class Extensions
     }
 }
 
-#region Consts / Action Helpers
+#region Consts / Helpers
+public static class D
+{
+    public static void WL(string message) => Console.Error.WriteLine(message);
+}
 
 public static class Actions
 {
