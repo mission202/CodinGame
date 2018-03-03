@@ -103,7 +103,6 @@ public class GameState
         {
             input = _inputSource();
             Items.Add(new Item(input));
-            Console.Error.WriteLine(input);
         }
     }
 
@@ -216,16 +215,29 @@ public class Game
 {
     private readonly GameState _gs;
 
-    private HeroStats[] _myHeroes;
     private Queue<string> _toPick;
+    private Dictionary<string, List<StrategicMove>> _strategies = new Dictionary<string, List<StrategicMove>>();
 
     public Game(GameState gs = null)
     {
         _gs = gs ?? new GameState();
         _gs.Init();
 
-        _myHeroes = new[] { Heroes.Hulk, Heroes.Ironman };
-        _toPick = new Queue<string>(_myHeroes.Select(x => x.Name));
+        var hulk = new List<StrategicMove>
+        {
+            new StayAlive(),
+            new Tanking()
+        };
+
+        var ironMan = new List<StrategicMove>
+        {
+            new StayAlive()
+        };
+
+        _strategies.Add("HULK", hulk);
+        _strategies.Add("IRONMAN", hulk);
+
+        _toPick = new Queue<string>(_strategies.Keys);
 
         // TODO: Store IDs to Common Entities (e.g. Heroes, Towers etc.)
     }
@@ -234,16 +246,15 @@ public class Game
     {
         _gs.Turn();
 
-        // TODO: Create Basic "AI" for 2x Heroes
-
         // TODO: Heroes should be in GS.
         if (_gs.IsHeroPickRound)
             return new[] { _toPick.Dequeue() };
 
         var response = new List<string>();
 
-        foreach (var controlledHero in _myHeroes)
+        foreach (var controlledHero in _strategies.Keys)
         {
+            // TODO: Move Shopping to StrategicMove
             var shopping = ItemWorthBuying();
             if (shopping != null)
             {
@@ -251,71 +262,27 @@ public class Game
                 continue;
             }
 
-            var attackRange = controlledHero.Range;
-
             var friendly = _gs.Entities.Where(x => x.Team == _gs.MyTeam).ToList();
-            var enemy = _gs.Entities
-                .Where(x => x.Team != _gs.MyTeam)
-                .Where(x => x.UnitType != Units.GROOT)
-                .ToList();
-
-            var hero = friendly.OfType<Hero>().Where(x => x.Attribs.HeroType == controlledHero.Name).SingleOrDefault();
+            var hero = friendly.OfType<Hero>().Where(x => x.Attribs.HeroType == controlledHero).SingleOrDefault();
             if (hero == null)
             {
-                Console.Error.WriteLine($"RIP {controlledHero.Name} :'(");
+                Console.Error.WriteLine($"RIP {controlledHero} :'(");
                 continue;
             }
 
-            var selfPreservation = new StayAlive(hero, _gs).Move();
-            if (!string.IsNullOrWhiteSpace(selfPreservation))
+            string move = "";
+            foreach (var strategy in _strategies[controlledHero])
             {
-                response.Add(selfPreservation);
-                continue;
-            }
-
-            if (hero.Attribs.HeroType == "HULK")
-            {
-                var smashy = new Tanking(hero, _gs).Move();
-                if (!string.IsNullOrWhiteSpace(smashy))
+                move = strategy.Move(hero, _gs);
+                if (!string.IsNullOrWhiteSpace(move))
                 {
-                    response.Add(smashy);
-                    continue;
+                    response.Add(move);
+                    break;
                 }
             }
 
-            var friendlyUnits = friendly
-                .Where(x => x.UnitType == Units.UNIT)
-                .ToList();
-
-            if (!friendlyUnits.Any())
-            {
-                response.Add(new Retreat(hero, _gs).Move());
-                continue;
-            }
-
-            const int scanRange = 2;
-            var enemyFront = _gs.MyTeam == 0 ? enemy.Min(x => x.X) : enemy.Max(x => x.X);
-            var rabble = (int)friendlyUnits.Average(x => x.X);
-
-            var drawingClose = _gs.MyTeam == 0
-                ? enemyFront < (rabble + (attackRange * scanRange))
-                : enemyFront > (rabble - (attackRange * scanRange));
-
-            if (drawingClose)
-            {
-                var target = enemy
-                    .Where(x => x.X == enemyFront)
-                    .OrderByDescending(x => x.AttackDamage).First();
-                response.Add(Actions.AttackNearest(target.UnitType).WithMessage($"Target : {target.UnitType}"));
-                continue;
-            }
-
-            // Stick Close to Troops
-            var verticals = friendlyUnits.Select(x => x.Y).OrderBy(x => x).ToArray();
-            var middle = verticals.First() + ((verticals.Last() - verticals.First()) / 2);
-            var xPos = _gs.MyTeam == 0 ? rabble + (attackRange / 2) : rabble + (attackRange / 2);
-            response.Add(Actions.Move(xPos, middle).WithMessage("HOLD THE LINE"));
-            continue;
+            if (string.IsNullOrWhiteSpace(move))
+                response.Add(new DefaultAction().Move(hero, _gs));
         }
 
         return response.ToArray();
@@ -339,37 +306,75 @@ public class Game
     }
 }
 
+public class DefaultAction : StrategicMove
+{
+    public override string Move(Hero hero, GameState state)
+    {
+        var attackRange = hero.AttackRange;
+        var friendly = state.Entities.Where(x => x.Team == state.MyTeam).ToList();
+
+        var friendlyUnits = friendly
+                .Where(x => x.UnitType == Units.UNIT)
+                .ToList();
+
+        if (!friendlyUnits.Any())
+            return new Retreat().Move(hero, state);
+
+        var enemy = state.Entities
+                .Where(x => x.Team != state.MyTeam)
+                .Where(x => x.UnitType != Units.GROOT)
+                .ToList();
+
+        const int scanRange = 2;
+        var enemyFront = state.MyTeam == 0 ? enemy.Min(x => x.X) : enemy.Max(x => x.X);
+        var rabble = (int)friendlyUnits.Average(x => x.X);
+
+        var drawingClose = state.MyTeam == 0
+            ? enemyFront < (rabble + (attackRange * scanRange))
+            : enemyFront > (rabble - (attackRange * scanRange));
+
+        if (drawingClose)
+        {
+            var target = enemy
+                .Where(x => x.X == enemyFront)
+                .OrderByDescending(x => x.AttackDamage).First();
+            return Actions.AttackNearest(target.UnitType).WithMessage($"Target : {target.UnitType}");
+        }
+
+        // Stick Close to Troops
+        var verticals = friendlyUnits.Select(x => x.Y).OrderBy(x => x).ToArray();
+        var middle = verticals.First() + ((verticals.Last() - verticals.First()) / 2);
+        var xPos = state.MyTeam == 0 ? rabble + (attackRange / 2) : rabble + (attackRange / 2);
+        return Actions.Move(xPos, middle).WithMessage("HOLD THE LINE");
+    }
+}
+
 public class StayAlive : StrategicMove
 {
-    public StayAlive(Hero hero, GameState state) : base(hero, state)
+    public override string Move(Hero hero, GameState state)
     {
-
-    }
-
-    public override string Move()
-    {
-        var threat = State.Entities
+        var threat = state.Entities
             .Where(x => !x.IsNeutral)
-            .Where(x => x.Team != State.MyTeam)
-            .Where(x => x.Distance(Hero) <= x.AttackRange * 2)
+            .Where(x => x.Team != state.MyTeam)
+            .Where(x => x.Distance(hero) <= x.AttackRange * 2)
             .Sum(x => x.AttackDamage);
 
-        var safe = Hero.Health > (threat * 1.1);
+        var safe = hero.Health > (threat * 1.1);
 
-        Console.Error.WriteLine($"{Hero.Attribs.HeroType} Health: {Hero.Health} - Threat: {threat} Safe? {safe}");
+        Console.Error.WriteLine($"{hero.Attribs.HeroType} Health: {hero.Health} - Threat: {threat} Safe? {safe}");
 
         if (safe) return string.Empty;
 
-        var tower = State.Entities.Where(x => x.Team == State.MyTeam).Where(x => x.UnitType == Units.TOWER).Single();
+        var tower = state.Entities.Where(x => x.Team == state.MyTeam).Where(x => x.UnitType == Units.TOWER).Single();
 
-        if (threat * 2 > Hero.Health) // RUUUUN!
+        if (threat * 2 > hero.Health) // RUUUUN!
             return Actions.Move(tower.X, tower.Y).WithMessage("Overpowered!");
 
-        if (Hero.Attribs.ItemsOwned < Consts.MAX_ITEMS)
+        if (hero.Attribs.ItemsOwned < Consts.MAX_ITEMS)
         {
-            var need = Hero.MaxHealth - Hero.Health;
-            var potion = State.Items
-                .Affordable(State.PlayerGold)
+            var need = hero.MaxHealth - hero.Health;
+            var potion = state.Items
+                .Affordable(state.PlayerGold)
                 .Where(x => x.Health > 0 && x.Health < need)
                 .OrderByDescending(x => x.Health)
                 .FirstOrDefault();
@@ -387,71 +392,61 @@ public class StayAlive : StrategicMove
 
 public class Tanking : StrategicMove
 {
-    public Tanking(Hero hero, GameState state) : base(hero, state)
+    public override string Move(Hero hero, GameState state)
     {
-
-    }
-
-    public override string Move()
-    {
-        var byDistance = State.Entities
+        var byDistance = state.Entities
             .Where(x => !x.IsNeutral)
-            .Where(x => x.Team != State.MyTeam)
-            .OrderBy(x => x.Distance(Hero));
+            .Where(x => x.Team != state.MyTeam)
+            .OrderBy(x => x.Distance(hero));
 
         var closest = byDistance.FirstOrDefault();
 
         // Charge!
-        if (closest == null || closest.Distance(Hero) > 500) return string.Empty;
+        if (closest == null || closest.Distance(hero) > 500) return string.Empty;
 
-        if (closest.Distance(Hero) < Hero.AttackRange)
+        if (closest.Distance(hero) < hero.AttackRange)
         {
-            var threatCount = byDistance.Where(x => x.Distance(Hero) < x.AttackRange).Count();
+            var threatCount = byDistance.Where(x => x.Distance(hero) < x.AttackRange).Count();
 
             if (threatCount > 2)
             {
-                var shieldState = int.TryParse(State.GetState("HULK_SHIELD"), out var shieldCD);
+                var shieldState = int.TryParse(state.GetState("HULK_SHIELD"), out var shieldCD);
                 if (shieldState)
                 {
                     if (shieldCD > 1)
                     {
-                        State.SetState("HULK_SHIELD", (--shieldCD).ToString());
+                        state.SetState("HULK_SHIELD", (--shieldCD).ToString());
                         return Actions.MoveAttack(closest);
                     }
                 }
 
-                State.SetState("HULK_SHIELD", "8");
+                state.SetState("HULK_SHIELD", "8");
                 return $"EXPLOSIVESHIELD";
             }
 
             return Actions.MoveAttack(closest);
         }
 
-        var inState = int.TryParse(State.GetState("HULK_CHARGE"), out var coolDown);
+        var inState = int.TryParse(state.GetState("HULK_CHARGE"), out var coolDown);
         if (inState)
         {
             if (coolDown > 1)
             {
-                State.SetState("HULK_CHARGE", (--coolDown).ToString());
+                state.SetState("HULK_CHARGE", (--coolDown).ToString());
                 return Actions.MoveAttack(closest).WithMessage($"HULK COOLING {coolDown}");
             }
         }
 
-        State.SetState("HULK_CHARGE", "8");
+        state.SetState("HULK_CHARGE", "8");
         return $"CHARGE {closest.UnitId}".WithMessage($"HULK GET {closest.UnitType} {closest.UnitId}!");
     }
 }
 
 public class Retreat : StrategicMove
 {
-    public Retreat(Hero hero, GameState state) : base(hero, state)
+    public override string Move(Hero hero, GameState state)
     {
-
-    }
-
-    public override string Move()
-    {
-        var friendly = State.Entities.Where(x => x.Team == State.MyTeam).ToList();
+        var friendly = state.Entities.Where(x => x.Team == state.MyTeam).ToList();
         var tower = friendly.Where(x => x.UnitType == Units.TOWER).Single();
         return Actions.Move(tower.X, tower.Y).WithMessage("Retreat!");
     }
@@ -461,16 +456,7 @@ public class Retreat : StrategicMove
 
 public abstract class StrategicMove
 {
-    protected readonly Hero Hero;
-    protected readonly GameState State;
-
-    public abstract string Move();
-
-    protected StrategicMove(Hero hero, GameState state)
-    {
-        Hero = hero;
-        State = state;
-    }
+    public abstract string Move(Hero hero, GameState state);
 }
 
 public class Entity
