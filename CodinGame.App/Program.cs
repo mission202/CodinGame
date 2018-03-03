@@ -16,8 +16,6 @@ class Player
         var game = new Game();
         while (true)
         {
-            // If roundType has a negative value then you need to output a Hero name, such as "DEADPOOL" or "VALKYRIE".
-            // Else you need to output roundType number of any valid action, such as "WAIT" or "ATTACK unitId"
             try
             {
                 Console.WriteLine(game.Move());
@@ -56,8 +54,13 @@ public class GameState
     public int PlayerGold { get; private set; }
     public int EnemyGold { get; private set; }
     public List<Entity> Entities { get; } = new List<Entity>();
+    public List<Item> Items { get; } = new List<Item>();
+
+    private int _carrying = 0;
+    public int ItemsSlotsAvailable => 4 - _carrying;
 
     protected Func<string> _inputSource = Console.ReadLine;
+
 
     private readonly Queue<string> _init = new Queue<string>();
     private readonly Queue<string> _turn = new Queue<string>();
@@ -91,22 +94,11 @@ public class GameState
         input = read();
 
         int itemCount = int.Parse(input); // useful from wood2
-        //TODO: Store Items
         for (int i = 0; i < itemCount; i++)
         {
             input = _inputSource();
+            Items.Add(new Item(input));
             Console.Error.WriteLine(input);
-            inputs = input.Split(' ');
-            string itemName = inputs[0]; // contains keywords such as BRONZE, SILVER and BLADE, BOOTS connected by "_" to help you sort easier
-            int itemCost = int.Parse(inputs[1]); // BRONZE items have lowest cost, the most expensive items are LEGENDARY
-            int damage = int.Parse(inputs[2]); // keyword BLADE is present if the most important item stat is damage
-            int health = int.Parse(inputs[3]);
-            int maxHealth = int.Parse(inputs[4]);
-            int mana = int.Parse(inputs[5]);
-            int maxMana = int.Parse(inputs[6]);
-            int moveSpeed = int.Parse(inputs[7]); // keyword BOOTS is present if the most important item stat is moveSpeed
-            int manaRegeneration = int.Parse(inputs[8]);
-            int isPotion = int.Parse(inputs[9]); // 0 if it's not instantly consumed
         }
     }
 
@@ -186,6 +178,12 @@ public class GameState
         allInputs.AddRange(_turn);
         return $"{string.Join(Environment.NewLine, allInputs)}";
     }
+
+    public string Buy(Item item)
+    {
+        _carrying++;
+        return Actions.Buy(item.Name).WithMessage("Retail Therapy");
+    }
 }
 
 public class Game
@@ -203,9 +201,13 @@ public class Game
         _gs.Turn();
 
         if (_gs.IsHeroPickRound)
-            return Actions.Heroes.Hulk;
+            return Actions.Heroes.Ironman.Name;
 
-        var attackRange = 95; // For Hulk
+        var shopping = ItemWorthBuying();
+        if (shopping != null)
+            return _gs.Buy(shopping);
+
+        var attackRange = Actions.Heroes.Ironman.Range;
 
         var friendly = _gs.Entities.Where(x => x.Team == _gs.MyTeam).ToList();
         var enemy = _gs.Entities.Where(x => x.Team != _gs.MyTeam).ToList();
@@ -222,36 +224,51 @@ public class Game
             .Where(x => x.UnitType == Units.UNIT)
             .ToList();
 
+        const int scanRange = 2;
         var enemyFront = _gs.MyTeam == 0 ? enemy.Min(x => x.X) : enemy.Max(x => x.X);
-        var rearLine = _gs.MyTeam == 0 ? friendlyUnits.Min(x => x.X) : friendlyUnits.Max(x => x.X);
+        var rabble = (int)friendlyUnits.Average(x => x.X);
+
         var drawingClose = _gs.MyTeam == 0
-            ? enemyFront < (rearLine + (attackRange * 4))
-            : enemyFront > (rearLine - (attackRange * 4));
+            ? enemyFront < (rabble + (attackRange * scanRange))
+            : enemyFront > (rabble - (attackRange * scanRange));
 
         if (drawingClose)
         {
-            // Move to Attack
-            var targets = enemy.Where(x => x.X == enemyFront);
-            var heroARL = hero.X - (attackRange * 3);
-            var heroARR = hero.X + (attackRange * 3);
-            if (targets.Any(x => x.UnitType == Units.HERO && (x.X >= heroARL) && (x.X <= heroARR)))
-                return Actions.MoveAttack(targets.First(x => x.UnitType == Units.HERO)).WithMessage("Kill The Hero!");
-
-            var count = targets.Count();
-            var target = targets.Skip(count / 2).First();
-            return Actions.MoveAttack(target).WithMessage("HULK SMASH!");
+            var target = enemy
+                .Where(x => x.X == enemyFront)
+                .OrderByDescending(x => x.GoldValue).First();
+            return Actions.AttackNearest(target.UnitType).WithMessage($"Target : {target.UnitType}");
         }
 
         // Stick Close to Troops
         var verticals = friendlyUnits.Select(x => x.Y).OrderBy(x => x).ToArray();
         var middle = verticals.First() + ((verticals.Last() - verticals.First()) / 2);
-
-        return Actions.Move(rearLine + attackRange, middle).WithMessage("Support Rear");
+        var xPos = _gs.MyTeam == 0 ? rabble + (attackRange / 2) : rabble + (attackRange / 2);
+        return Actions.Move(xPos, middle).WithMessage("HOLD THE LINE");
     }
 
     public string Serialise()
     {
         return $"{_gs.Serialise()}";
+    }
+
+    private Item ItemWorthBuying()
+    {
+        if (_gs.ItemsSlotsAvailable <= 0) return null;
+
+        return _gs
+            .Items
+            .Affordable(_gs.PlayerGold)
+            .OrderByDescending(x => x.Damage)
+            .FirstOrDefault();
+    }
+}
+
+public static class Extensions
+{
+    public static IEnumerable<Item> Affordable(this IEnumerable<Item> items, int gold)
+    {
+        return items.Where(x => x.Cost <= gold);
     }
 }
 
@@ -308,6 +325,36 @@ public class Hero : Entity
     }
 }
 
+public class Item
+{
+    public string Name { get; private set; } // BRONZE>LEGENDARY BLADE=DMG BOOTS=SPEED
+    public int Cost { get; private set; }
+    public int Damage { get; private set; }
+    public int Health { get; private set; }
+    public int MaxHealth { get; private set; }
+    public int Mana { get; private set; }
+    public int MaxMana { get; private set; }
+    public int MoveSpeed { get; private set; }
+    public int ManaRegeneration { get; private set; }
+    public int IsPotion { get; private set; }
+    public bool IsInstant => IsPotion != 0;
+
+    public Item(string input)
+    {
+        var inputs = input.Split(' ');
+        Name = inputs[0]; // contains keywords such as BRONZE, SILVER and BLADE, BOOTS connected by "_" to help you sort easier
+        Cost = int.Parse(inputs[1]); // BRONZE items have lowest cost, the most expensive items are LEGENDARY
+        Damage = int.Parse(inputs[2]); // keyword BLADE is present if the most important item stat is damage
+        Health = int.Parse(inputs[3]);
+        MaxHealth = int.Parse(inputs[4]);
+        Mana = int.Parse(inputs[5]);
+        MaxMana = int.Parse(inputs[6]);
+        MoveSpeed = int.Parse(inputs[7]); // keyword BOOTS is present if the most important item stat is moveSpeed
+        ManaRegeneration = int.Parse(inputs[8]);
+        IsPotion = int.Parse(inputs[9]); // 0 if it's not instantly consumed
+    }
+}
+
 public static class Actions
 {
     public const string Wait = "WAIT";
@@ -315,14 +362,22 @@ public static class Actions
     public static string Move(int x, int y) => $"MOVE {x} {y}";
     public static string MoveAttack(Entity entity) => MoveAttack(entity.X, entity.Y, entity.UnitId);
     public static string MoveAttack(int x, int y, int id) => $"MOVE_ATTACK {x} {y} {id}";
+    public static string AttackNearest(string unit) => $"ATTACK_NEAREST {unit}";
+    public static string Buy(string item) => $"BUY {item}";
+    public static string Sell(string item) => $"SELL {item}";
 
     public static class Heroes
     {
         public const string Deadpool = "DEADPOOL";
         public const string DoctorStrange = "DOCTOR_STRANGE";
         public const string Hulk = "HULK";
-        public const string IronMan = "IRONMAN";
         public const string Valkyrie = "VALKYRIE";
+
+        public static class Ironman
+        {
+            public const string Name = "IRONMAN";
+            public const int Range = 270;
+        }
     }
 
     public static string WithMessage(this string action, string message) => $"{action};{message}";
