@@ -235,8 +235,6 @@ public class Game
                 .Where(x => x.UnitType != Units.GROOT)
                 .ToList();
 
-            // TODO: Only attack Groots for fundraising efforts.
-
             var hero = friendly.OfType<Hero>().Where(x => x.Attribs.HeroType == controlledHero.Name).SingleOrDefault();
             if (hero == null)
             {
