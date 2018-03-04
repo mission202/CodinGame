@@ -50,14 +50,6 @@ class Player
 
 public class ScoreCriteria
 {
-    /* For Each Player:
-     *   Hero Health
-     *   Health
-     *   Attack Power
-     *   Number of Units
-     *   Threat (Units in Range)
-     *   Gold
-     */
     public int PlayerHeroHealth { get; private set; }
     public int EnemyHeroHealth { get; private set; }
     public int PlayerHealth { get; private set; }
@@ -293,12 +285,18 @@ public class Game
         var hulk = new List<StrategicMove>
         {
             new StayAlive(),
+            new ChargeSkill(),
+            new BashSkill(),
+            new ExplosiveShieldSkill(),
             new HoldTheLine(),
         };
 
         var ironMan = new List<StrategicMove>
         {
             new StayAlive(scaredyCat: true),
+            new BlinkSkill(),
+            new FireballSkill(),
+            new BurningSkill(),
             new HoldTheLine(),
             new RangedFighter()
         };
@@ -316,7 +314,7 @@ public class Game
         _gs.Turn();
 
         var score = new ScoreCriteria(_gs);
-        Console.Error.WriteLine(score);
+        //Console.Error.WriteLine(score);
 
         // TODO: Heroes should be in GS.
         if (_gs.IsHeroPickRound)
@@ -421,6 +419,144 @@ public class DefaultAction : StrategicMove
     }
 }
 
+#region HULK Skills
+public class ChargeSkill : UnitTargetedSkillMove
+{
+    public ChargeSkill() : base("HULK", "CHARGE", 20, 4) { }
+
+    protected override bool ShouldUse(Hero hero, GameState state)
+    {
+        var heroInRange = state.Entities
+            .OfType<Hero>()
+            .Where(x => !x.IsNeutral)
+            .Where(x => x.Team != state.MyTeam)
+            .OrderByDescending(x => x.MovementSpeed) // Want to attack fastest unit due to movement speed debuff
+            .Where(x => x.Distance(hero) <= 500)
+            .FirstOrDefault();
+
+        if (heroInRange == null) return false;
+
+        TargetId = heroInRange.UnitId;
+        return true;
+    }
+}
+
+public class ExplosiveShieldSkill : SkillMove
+{
+    public ExplosiveShieldSkill() : base("HULK", "EXPLOSIVESHIELD", 30, 8) { }
+
+    protected override bool ShouldUse(Hero hero, GameState state)
+    {
+        var threat = state.Entities
+            .Where(x => !x.IsNeutral)
+            .Where(x => x.Team != state.MyTeam)
+            .Where(x => x.Distance(hero) <= x.AttackRange)
+            .Sum(x => x.AttackDamage);
+
+        return threat > hero.MaxHealth * 0.2;
+    }
+}
+
+public class BashSkill : UnitTargetedSkillMove
+{
+    public BashSkill() : base("HULK", "BASH", 40, 8) { }
+
+    protected override bool ShouldUse(Hero hero, GameState state)
+    {
+        var heroInRange = state.Entities
+            .OfType<Hero>()
+            .Where(x => !x.IsNeutral)
+            .Where(x => x.Team != state.MyTeam)
+            .Where(x => x.Distance(hero) <= 150)
+            .FirstOrDefault();
+
+        if (heroInRange == null) return false;
+
+        TargetId = heroInRange.UnitId;
+        return true;
+    }
+}
+#endregion
+
+#region IRONMAN Skills
+public class FireballSkill : CoordinateTargetedSkillMove
+{
+    public FireballSkill() : base("IRONMAN", "FIREBALL", 60, 6) { }
+
+    protected override bool ShouldUse(Hero hero, GameState state)
+    {
+        var heroInRange = state.Entities
+            .OfType<Hero>()
+            .Where(x => !x.IsNeutral)
+            .Where(x => x.Team != state.MyTeam)
+            .Where(x => x.Distance(hero) <= 500) // Only Fire at Range for DMG
+            .Where(x => x.Distance(hero) <= 900)
+            .FirstOrDefault();
+
+        if (heroInRange == null) return false;
+
+        // Splash Damage - 50px Radius
+        var nearby = state.Entities
+            .Where(x => !x.IsNeutral)
+            .Where(x => x.Team != state.MyTeam)
+            .Where(x => x.Distance(heroInRange) <= 50)
+            .Count();
+
+        if (nearby < 2) return false;
+
+        Target = new Coordinate(heroInRange.X, heroInRange.Y);
+        return true;
+    }
+}
+
+public class BurningSkill : CoordinateTargetedSkillMove
+{
+    public BurningSkill() : base("IRONMAN", "BURNING", 50, 5) { }
+
+    protected override bool ShouldUse(Hero hero, GameState state)
+    {
+        var heroInRange = state.Entities
+            .OfType<Hero>()
+            .Where(x => !x.IsNeutral)
+            .Where(x => x.Team != state.MyTeam)
+            .Where(x => x.Distance(hero) <= 250)
+            .FirstOrDefault();
+
+        if (heroInRange == null) return false;
+
+        // Splash Damage - 100px Radius
+        var nearby = state.Entities
+            .Where(x => !x.IsNeutral)
+            .Where(x => x.Team != state.MyTeam)
+            .Where(x => x.Distance(heroInRange) <= 100)
+            .Count();
+
+        if (nearby < 2) return false;
+
+        Target = new Coordinate(heroInRange.X, heroInRange.Y);
+        return true;
+    }
+}
+
+public class BlinkSkill : CoordinateTargetedSkillMove
+{
+    public BlinkSkill() : base("IRONMAN", "BLINK", 16, 3) { }
+
+    protected override bool ShouldUse(Hero hero, GameState state)
+    {
+        if (hero.Attribs.MaxMana - hero.Attribs.Mana < 20) return false;
+        // TODO: Also Use for Retreat?
+
+        var back200 = state.MyTeam == 0
+            ? Math.Max(hero.X - 200, 0)
+            : Math.Min(hero.X + 200, Consts.WIDTH);
+
+        Target = new Coordinate(back200, hero.Y);
+        return true;
+    }
+}
+#endregion
+
 public class StayAlive : StrategicMove
 {
     private readonly bool _isPussy;
@@ -477,8 +613,18 @@ public class StayAlive : StrategicMove
 
 public class HoldTheLine : StrategicMove
 {
+    private int _targetId = -1;
+
     public override string Move(Hero hero, GameState state)
     {
+        var currentTarget = state.Entities.FirstOrDefault(x => x.UnitId == _targetId);
+
+        if (currentTarget != null)
+        {
+            D.WL($"Finishing Off Previously-Set Target {_targetId}");
+            return Actions.MoveAttack(currentTarget);
+        }
+
         // Get the Front Line - Support their firing line!
         var myUnits = state.Entities
             .Where(x => x.Team == state.MyTeam)
@@ -507,6 +653,7 @@ public class HoldTheLine : StrategicMove
             ? closest.X - hero.AttackRange
             : closest.X + hero.AttackRange;
 
+        _targetId = closest.UnitId;
         return Actions.MoveAttack(heroX, centreFormation, closest.UnitId).WithMessage($"Get {closest.UnitId} Off The Line!");
     }
 }
@@ -600,6 +747,75 @@ public class Retreat : StrategicMove
 public abstract class StrategicMove
 {
     public abstract string Move(Hero hero, GameState state);
+}
+
+public abstract class UnitTargetedSkillMove : SkillMove
+{
+    protected int TargetId = -1;
+
+    protected override string Command => $"{SkillName} {TargetId}";
+
+    public UnitTargetedSkillMove(string forHero, string skillName, int manaCost, int cooldown) : base(forHero, skillName, manaCost, cooldown)
+    {
+    }
+}
+
+public abstract class CoordinateTargetedSkillMove : SkillMove
+{
+    protected Coordinate Target = new Coordinate(0, 0);
+
+    protected override string Command => $"{SkillName} {Target.X} {Target.Y}";
+
+    public CoordinateTargetedSkillMove(string forHero, string skillName, int manaCost, int cooldown) : base(forHero, skillName, manaCost, cooldown)
+    {
+    }
+}
+
+public abstract class SkillMove : StrategicMove
+{
+    protected abstract bool ShouldUse(Hero hero, GameState state);
+
+    protected int CooldownRemaining = 0;
+    protected readonly string ForHero;
+    protected readonly string SkillName;
+    protected readonly int ManaCost;
+    protected readonly int Cooldown;
+
+    protected virtual string Command => $"{SkillName}";
+
+    public SkillMove(string forHero, string skillName, int manaCost, int cooldown)
+    {
+        ForHero = forHero;
+        SkillName = skillName;
+        ManaCost = manaCost;
+        Cooldown = cooldown;
+    }
+
+    public override string Move(Hero hero, GameState state)
+    {
+        if (hero.Attribs.HeroType != ForHero) return string.Empty;
+        if (CooldownRemaining > 0)
+        {
+            CooldownRemaining--;
+            D.WL($"{SkillName} Cooldown to {CooldownRemaining}");
+            return string.Empty;
+        }
+
+        if (ShouldUse(hero, state))
+        {
+            if (hero.Attribs.Mana >= ManaCost)
+            {
+                D.WL($"Activating {SkillName}");
+                CooldownRemaining = Cooldown;
+                return Command;
+            }
+
+            D.WL($"Unable to Activate {SkillName} - Mana {hero.Attribs.Mana}/{hero.Attribs.MaxMana}");
+        }
+
+        D.WL($"Don't Need to Activate {SkillName}");
+        return string.Empty;
+    }
 }
 
 public class Entity
