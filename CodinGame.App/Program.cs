@@ -60,6 +60,7 @@ public class GameState
     public int EnemyGold { get; private set; }
     public List<Entity> Entities { get; } = new List<Entity>();
     public List<Item> Items { get; } = new List<Item>();
+    public List<Coordinate> Bushes { get; } = new List<Coordinate>();
 
     private int _carrying = 0;
     public int ItemsSlotsAvailable => Consts.MAX_ITEMS - _carrying;
@@ -95,6 +96,11 @@ public class GameState
             int x = int.Parse(inputs[1]);
             int y = int.Parse(inputs[2]);
             int radius = int.Parse(inputs[3]);
+
+            if (entityType == Units.BUSH)
+            {
+                Bushes.Add(new Coordinate(x, y));
+            }
         }
         input = read();
 
@@ -392,8 +398,14 @@ public class StayAlive : StrategicMove
         // TODO: Sell Item to make space?
         // TODO: Consider attacking at range?
 
+        var bush = state.Bushes.OrderBy(x => hero.Distance(x)).FirstOrDefault();
         var tower = state.Entities.Where(x => x.Team == state.MyTeam).Where(x => x.UnitType == Units.TOWER).Single();
-        return Actions.Move(tower.X, tower.Y).WithMessage("Out of Game");
+
+        var bushD = hero.Distance(bush);
+        var towerD = tower.Distance(hero);
+        return bushD < towerD
+            ? Actions.Move(bush.X, bush.Y).WithMessage("To the Bush!")
+            : Actions.Move(tower.X, tower.Y).WithMessage("RTB");
     }
 }
 
@@ -587,6 +599,20 @@ public static class Units
     public const string HERO = "HERO";
     public const string TOWER = "TOWER";
     public const string GROOT = "GROOT";
+    public const string BUSH = "BUSH";
+    public const string SPAWN = "SPAWN";
+}
+
+public struct Coordinate
+{
+    public int X { get; set; }
+    public int Y { get; set; }
+
+    public Coordinate(int x, int y)
+    {
+        X = x;
+        Y = y;
+    }
 }
 
 #endregion
@@ -599,6 +625,11 @@ public static class Extensions
     }
 
     public static int Distance(this Entity a, Entity b)
+    {
+        return (int)Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(b.Y - a.Y, 2));
+    }
+
+    public static int Distance(this Entity a, Coordinate b)
     {
         return (int)Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(b.Y - a.Y, 2));
     }
