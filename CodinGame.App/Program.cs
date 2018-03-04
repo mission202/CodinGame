@@ -48,6 +48,67 @@ class Player
  * - Ranged - Avoid Units and attack at range.
  */
 
+public class ScoreCriteria
+{
+    /* For Each Player:
+     *   Hero Health
+     *   Health
+     *   Attack Power
+     *   Number of Units
+     *   Threat (Units in Range)
+     *   Gold
+     */
+    public int PlayerHeroHealth { get; private set; }
+    public int EnemyHeroHealth { get; private set; }
+    public int PlayerHealth { get; private set; }
+    public int EnemyHealth { get; private set; }
+    public int PlayerPower { get; private set; }
+    public int EnemyPower { get; private set; }
+    public int PlayerUnits { get; private set; }
+    public int EnemyUnits { get; private set; }
+    public int PlayerThreat { get; private set; }
+    public int EnemyThreat { get; private set; }
+    public int PlayerGold { get; private set; }
+    public int EnemyGold { get; private set; }
+
+    public ScoreCriteria(GameState state)
+    {
+        var playerUnits = state.Entities.Where(x => x.Team == state.MyTeam).ToList();
+        var enemyUnits = state.Entities.Where(x => x.Team != state.MyTeam && !x.IsNeutral).ToList();
+
+        PlayerHeroHealth = playerUnits.OfType<Hero>().Sum(x => x.Health);
+        EnemyHeroHealth = enemyUnits.OfType<Hero>().Sum(x => x.Health);
+
+        PlayerHealth = playerUnits.Sum(x => x.Health);
+        EnemyHealth = enemyUnits.Sum(x => x.Health);
+
+        PlayerPower = playerUnits.Sum(x => x.AttackDamage);
+        EnemyPower = enemyUnits.Sum(x => x.AttackDamage);
+
+        PlayerUnits = playerUnits.Count();
+        EnemyUnits = enemyUnits.Count();
+
+        PlayerThreat = playerUnits.Where(x => enemyUnits.Any(y => y.Distance(x) < x.AttackRange)).Sum(x => x.AttackDamage);
+        EnemyThreat = enemyUnits.Where(x => playerUnits.Any(y => y.Distance(x) < x.AttackRange)).Sum(x => x.AttackDamage);
+
+        PlayerGold = state.PlayerGold;
+        EnemyGold = state.EnemyGold;
+    }
+
+    public override string ToString()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Score Criteria:");
+        sb.AppendLine($"* Hero Health: {PlayerHeroHealth} vs. {EnemyHeroHealth}");
+        sb.AppendLine($"* Health: {PlayerHealth} vs. {EnemyHealth}");
+        sb.AppendLine($"* Power: {PlayerPower} vs. {EnemyPower}");
+        sb.AppendLine($"* Units: {PlayerUnits} vs. {EnemyUnits}");
+        sb.AppendLine($"* Threat: {PlayerThreat} vs. {EnemyThreat}");
+        sb.AppendLine($"* Gold: {PlayerGold} vs. {EnemyGold}");
+        return sb.ToString();
+    }
+}
+
 public class GameState
 {
     public int MyTeam { get; private set; }
@@ -251,6 +312,9 @@ public class Game
     public string[] Moves()
     {
         _gs.Turn();
+
+        var score = new ScoreCriteria(_gs);
+        Console.Error.WriteLine(score);
 
         // TODO: Heroes should be in GS.
         if (_gs.IsHeroPickRound)
