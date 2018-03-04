@@ -293,16 +293,18 @@ public class Game
         var hulk = new List<StrategicMove>
         {
             new StayAlive(),
-            new Tanking()
+            new HoldTheLine(),
         };
 
         var ironMan = new List<StrategicMove>
         {
-            new StayAlive(scaredyCat: true)
+            new StayAlive(scaredyCat: true),
+            new HoldTheLine(),
+            new RangedFighter()
         };
 
-        _strategies.Add("HULK", hulk);
-        _strategies.Add("IRONMAN", ironMan);
+        _strategies.Add(Heroes.Hulk.Name, hulk);
+        _strategies.Add(Heroes.Ironman.Name, ironMan);
 
         _toPick = new Queue<string>(_strategies.Keys);
 
@@ -470,6 +472,64 @@ public class StayAlive : StrategicMove
         return bushD < towerD
             ? Actions.Move(bush.X, bush.Y).WithMessage("To the Bush!")
             : Actions.Move(tower.X, tower.Y).WithMessage("RTB");
+    }
+}
+
+public class HoldTheLine : StrategicMove
+{
+    public override string Move(Hero hero, GameState state)
+    {
+        // Get the Front Line - Support their firing line!
+        var myUnits = state.Entities
+            .Where(x => x.Team == state.MyTeam)
+            .Where(x => x.UnitType == Units.UNIT)
+            .ToList();
+
+        if (!myUnits.Any()) return string.Empty;
+
+        var theFront = state.MyTeam == 0
+            ? myUnits.Max(x => x.X)
+            : myUnits.Min(x => x.X);
+
+        var centreFormation = (int)myUnits.Average(x => x.Y);
+
+        // Find Enemy Closest to Front Line
+        var closest = state.Entities
+            .Where(x => !x.IsNeutral)
+            .Where(x => x.Team != state.MyTeam)
+            .OrderBy(x => x.Distance(new Coordinate(theFront, centreFormation)))
+            .FirstOrDefault();
+
+        if (closest == null)
+            return Actions.Move(theFront, centreFormation).WithMessage("To the Front!");
+
+        var heroX = state.MyTeam == 0
+            ? closest.X - hero.AttackRange
+            : closest.X + hero.AttackRange;
+
+        return Actions.MoveAttack(heroX, centreFormation, closest.UnitId).WithMessage($"Get {closest.UnitId} Off The Line!");
+    }
+}
+
+public class RangedFighter : StrategicMove
+{
+    public override string Move(Hero hero, GameState state)
+    {
+        var byDistance = state.Entities
+            .Where(x => !x.IsNeutral)
+            .Where(x => x.Team != state.MyTeam)
+            .OrderBy(x => x.Distance(hero));
+
+        var closest = byDistance.FirstOrDefault();
+
+        if (closest == null) return string.Empty;
+
+        // Keep at Arms Length
+        var moveX = state.MyTeam == 0
+            ? closest.X - hero.AttackRange
+            : closest.X + hero.AttackRange;
+
+        return Actions.MoveAttack(moveX, closest.Y, closest.UnitId);
     }
 }
 
@@ -721,26 +781,28 @@ public static class Actions
 
 public static class Heroes
 {
-    public const string Deadpool = "DEADPOOL";
-    public const string DoctorStrange = "DOCTOR_STRANGE";
-    public const string Valkyrie = "VALKYRIE";
-
     private static readonly Dictionary<string, HeroStats> _heroes = new Dictionary<string, HeroStats>
     {
-        // TODO: Deadpool
-        // TODO: Dr Strange
+        { "DEADPOOL", new HeroStats("DEADPOOL", 110) },
+        { "DOCTOR_STRANGE", new HeroStats("DOCTOR_STRANGE", 245) },
         { "HULK", new HeroStats("HULK", 95) },
         { "IRONMAN", new HeroStats("IRONMAN", 270) },
+        { "VALKYRIE", new HeroStats("VALKYRIE", 130) },
         // TODO: Valkyrie
     };
 
+    public static HeroStats Deadpool => _heroes["DEADPOOL"];
+    public static HeroStats DoctorStrange => _heroes["DOCTOR_STRANGE"];
     public static HeroStats Hulk => _heroes["HULK"];
     public static HeroStats Ironman => _heroes["IRONMAN"];
+    public static HeroStats Valkyrie => _heroes["VALKYRIE"];
 }
 
 public static class Consts
 {
     public const int MAX_ITEMS = 4;
+    public const int WIDTH = 1920;
+    public const int HEIGHT = 750;
 }
 
 #endregion
