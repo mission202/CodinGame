@@ -568,46 +568,46 @@ public class StayAlive : StrategicMove
 
     public override string Move(Hero hero, GameState state)
     {
-        var threat = state.Entities
-            .Where(x => !x.IsNeutral)
-            .Where(x => x.Team != state.MyTeam)
-            .Where(x => x.Distance(hero) <= x.AttackRange)
-            .Sum(x => x.AttackDamage);
+        //var threat = state.Entities
+        //    .Where(x => !x.IsNeutral)
+        //    .Where(x => x.Team != state.MyTeam)
+        //    .Where(x => x.Distance(hero) <= x.AttackRange)
+        //    .Sum(x => x.AttackDamage);
 
-        var fear = _isPussy
-            ? threat * 2
-            : threat * 1.1;
+        //var fear = _isPussy
+        //    ? threat * 2
+        //    : threat * 1.1;
 
-        var safe = hero.Health > fear;
+        //var safe = hero.Health > fear;
 
-        D.WL($"(StayAlive): {hero.Attribs.HeroType} Pussy? {_isPussy} Health: {hero.Health} - Threat: {threat} Safe? {safe}");
+        //D.WL($"(StayAlive): {hero.Attribs.HeroType} Pussy? {_isPussy} Health: {hero.Health} - Threat: {threat} Safe? {safe}");
 
-        if (safe) return string.Empty;
+        //if (safe) return string.Empty;
 
-        if (hero.Attribs.ItemsOwned < Consts.MAX_ITEMS)
-        {
-            var need = hero.MaxHealth - hero.Health;
-            var potion = state.Items
-                .Affordable(state.PlayerGold)
-                .Where(x => x.Health > 0 && x.Health < need)
-                .OrderByDescending(x => x.Health)
-                .FirstOrDefault();
+        var need = hero.MaxHealth - hero.Health;
 
-            if (potion != null)
-                return Actions.Buy(potion).WithMessage("Healed Via Potion!");
-        }
+        var potion = state.Items
+            .Affordable(state.PlayerGold)
+            .Where(x => x.Health > 0 && x.Health < need)
+            .OrderByDescending(x => x.Health)
+            .FirstOrDefault();
+
+        if (potion != null)
+            return Actions.Buy(potion).WithMessage("Healed Via Potion!");
 
         // TODO: Sell Item to make space?
         // TODO: Consider attacking at range?
 
-        var bush = state.Bushes.OrderBy(x => hero.Distance(x)).FirstOrDefault();
-        var tower = state.Entities.Where(x => x.Team == state.MyTeam).Where(x => x.UnitType == Units.TOWER).Single();
+        //var bush = state.Bushes.OrderBy(x => hero.Distance(x)).FirstOrDefault();
+        //var tower = state.Entities.Where(x => x.Team == state.MyTeam).Where(x => x.UnitType == Units.TOWER).Single();
 
-        var bushD = hero.Distance(bush);
-        var towerD = tower.Distance(hero);
-        return bushD < towerD
-            ? Actions.Move(bush.X, bush.Y).WithMessage("To the Bush!")
-            : Actions.Move(tower.X, tower.Y).WithMessage("RTB");
+        //var bushD = hero.Distance(bush);
+        //var towerD = tower.Distance(hero);
+        //return bushD < towerD
+        //    ? Actions.Move(bush.X, bush.Y).WithMessage("To the Bush!")
+        //    : Actions.Move(tower.X, tower.Y).WithMessage("RTB");
+
+        return string.Empty;
     }
 }
 
