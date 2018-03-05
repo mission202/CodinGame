@@ -617,14 +617,6 @@ public class HoldTheLine : StrategicMove
 
     public override string Move(Hero hero, GameState state)
     {
-        var currentTarget = state.Entities.FirstOrDefault(x => x.UnitId == _targetId);
-
-        if (currentTarget != null)
-        {
-            D.WL($"Finishing Off Previously-Set Target {_targetId}");
-            return Actions.MoveAttack(currentTarget);
-        }
-
         // Get the Front Line - Support their firing line!
         var myUnits = state.Entities
             .Where(x => x.Team == state.MyTeam)
@@ -993,6 +985,11 @@ public static class Actions
     public static string Buy(Item item) => Buy(item.Name);
     public static string Sell(string item) => $"SELL {item}";
     public static string WithMessage(this string action, string message) => $"{action};{message}";
+    public static string AndDebug(this string action, string message)
+    {
+        D.WL(message);
+        return $"{action}";
+    }
 }
 
 public static class Heroes
