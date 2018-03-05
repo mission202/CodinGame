@@ -282,13 +282,15 @@ public class Game
         _gs = gs ?? new GameState();
         _gs.Init();
 
+        var htl = new HoldTheLine();
+
         var hulk = new List<StrategicMove>
         {
             new StayAlive(),
-            new ChargeSkill(),
+            //new ChargeSkill(),
             new BashSkill(),
             new ExplosiveShieldSkill(),
-            new HoldTheLine(),
+            htl,
         };
 
         var ironMan = new List<StrategicMove>
@@ -297,7 +299,7 @@ public class Game
             new BlinkSkill(),
             new FireballSkill(),
             new BurningSkill(),
-            new HoldTheLine(),
+            htl,
             new RangedFighter()
         };
 
@@ -467,10 +469,12 @@ public class BashSkill : UnitTargetedSkillMove
             .OfType<Hero>()
             .Where(x => !x.IsNeutral)
             .Where(x => x.Team != state.MyTeam)
-            .Where(x => x.Distance(hero) <= 150)
+            .Where(x => x.Distance(hero) <= 140)
             .FirstOrDefault();
 
         if (heroInRange == null) return false;
+
+        D.WL($"Targeted {heroInRange.Attribs.HeroType} ({heroInRange.UnitId}) @ {heroInRange.Distance(hero)}");
 
         TargetId = heroInRange.UnitId;
         return true;
@@ -568,32 +572,61 @@ public class StayAlive : StrategicMove
 
     public override string Move(Hero hero, GameState state)
     {
-        //var threat = state.Entities
-        //    .Where(x => !x.IsNeutral)
-        //    .Where(x => x.Team != state.MyTeam)
-        //    .Where(x => x.Distance(hero) <= x.AttackRange)
-        //    .Sum(x => x.AttackDamage);
+        var threat = state.Entities
+            .Where(x => !x.IsNeutral)
+            .Where(x => x.Team != state.MyTeam)
+            .Where(x => x.Distance(hero) <= x.AttackRange)
+            .Sum(x => x.AttackDamage);
 
-        //var fear = _isPussy
-        //    ? threat * 2
-        //    : threat * 1.1;
+        var fear = _isPussy
+            ? threat * 2
+            : threat * 1.1;
 
-        //var safe = hero.Health > fear;
+        var safe = hero.Health > fear;
 
-        //D.WL($"(StayAlive): {hero.Attribs.HeroType} Pussy? {_isPussy} Health: {hero.Health} - Threat: {threat} Safe? {safe}");
+        if (safe)
+        {
+            var need = hero.MaxHealth - hero.Health;
 
-        //if (safe) return string.Empty;
+            var potion = state.Items
+                .Affordable(state.PlayerGold)
+                .Where(x => x.Health > 0 && x.Health < need)
+                .OrderByDescending(x => x.Health)
+                .FirstOrDefault();
 
-        var need = hero.MaxHealth - hero.Health;
+            if (potion != null)
+                return Actions.Buy(potion).Debug($"Healed {hero.Attribs.HeroType} Via Potion!");
 
-        var potion = state.Items
-            .Affordable(state.PlayerGold)
-            .Where(x => x.Health > 0 && x.Health < need)
-            .OrderByDescending(x => x.Health)
-            .FirstOrDefault();
+            var pc = ((float)hero.Health / hero.MaxHealth) * 100;
+            D.WL($"{hero.Attribs.HeroType} Health {hero.Health}/{hero.MaxHealth} ({pc})");
 
-        if (potion != null)
-            return Actions.Buy(potion).WithMessage("Healed Via Potion!");
+            if (pc <= 35)
+            {
+                var tower = state.Entities
+                    .Where(x => x.Team == state.MyTeam)
+                    .Where(x => x.UnitType == Units.TOWER)
+                    .Single();
+
+                var xPos = state.MyTeam == 0
+                    ? 0
+                    : Consts.WIDTH;
+
+                if (hero.X != xPos || hero.Y != tower.Y)
+                    return Actions.Move(xPos, tower.Y).Debug($"{hero.Attribs.HeroType} Need Heal - {hero.Attribs.HeroType} RTB");
+
+                D.WL("Awaiting Heal at Tower - Keep Fighting!");
+                var nearestEnemy = state.Entities
+                    .Where(x => x.Team != state.MyTeam)
+                    .Where(x => x.Distance(hero) < hero.AttackRange)
+                    .FirstOrDefault();
+
+                return nearestEnemy == null
+                    ? Actions.Wait.Debug($"{hero.Attribs.HeroType} Awaiting Heal at Tower - Nothing in Range")
+                    : Actions.Attack(nearestEnemy).Debug($"{hero.Attribs.HeroType} Awaiting Heal at Tower - Attacking {nearestEnemy.UnitId}");
+            }
+        }
+
+        return string.Empty;
 
         // TODO: Sell Item to make space?
         // TODO: Consider attacking at range?
@@ -623,7 +656,16 @@ public class HoldTheLine : StrategicMove
             .Where(x => x.UnitType == Units.UNIT)
             .ToList();
 
-        if (!myUnits.Any()) return string.Empty;
+        if (!myUnits.Any())
+        {
+            _targetId = -1;
+            var tower = state.Entities
+                .Where(x => x.Team == state.MyTeam)
+                .Where(x => x.UnitType == Units.TOWER)
+                .Single();
+
+            return Actions.Move(tower.X, tower.Y).Debug($"Line Folded {hero.Attribs.HeroType} RTB");
+        }
 
         var theFront = state.MyTeam == 0
             ? myUnits.Max(x => x.X)
@@ -631,15 +673,36 @@ public class HoldTheLine : StrategicMove
 
         var centreFormation = (int)myUnits.Average(x => x.Y);
 
-        // Find Enemy Closest to Front Line
+        if (_targetId != -1)
+        {
+            var unit = state.Entities.SingleOrDefault(x => x.UnitId == _targetId);
+
+            if (unit == null)
+                _targetId = -1;
+            else
+            {
+                // Only Gank if In Range of Line
+                if (unit.Distance(new Coordinate(theFront, centreFormation)) < hero.AttackRange)
+                {
+                    return Actions.MoveAttack(theFront, centreFormation, _targetId)
+                        .Debug($"Engaging Previous Target {_targetId} as In-Range");
+                }
+            }
+        }
+
+        // Find Enemy Closest to Front Line AND in Firing Range!
         var closest = state.Entities
             .Where(x => !x.IsNeutral)
             .Where(x => x.Team != state.MyTeam)
+            .Where(x => x.Distance(new Coordinate(theFront, centreFormation)) < hero.AttackRange)
             .OrderBy(x => x.Distance(new Coordinate(theFront, centreFormation)))
             .FirstOrDefault();
 
         if (closest == null)
-            return Actions.Move(theFront, centreFormation).WithMessage("To the Front!");
+        {
+            _targetId = -1;
+            return Actions.Move(theFront, centreFormation).Debug($"{hero.Attribs.HeroType} To the Front!");
+        }
 
         var heroX = state.MyTeam == 0
             ? closest.X - hero.AttackRange
@@ -977,6 +1040,7 @@ public static class Actions
 {
     public const string Wait = "WAIT";
 
+    public static string Attack(Entity entity) => $"ATTACK {entity.UnitId}";
     public static string Move(int x, int y) => $"MOVE {x} {y}";
     public static string MoveAttack(Entity entity) => MoveAttack(entity.X, entity.Y, entity.UnitId);
     public static string MoveAttack(int x, int y, int id) => $"MOVE_ATTACK {x} {y} {id}";
@@ -985,7 +1049,7 @@ public static class Actions
     public static string Buy(Item item) => Buy(item.Name);
     public static string Sell(string item) => $"SELL {item}";
     public static string WithMessage(this string action, string message) => $"{action};{message}";
-    public static string AndDebug(this string action, string message)
+    public static string Debug(this string action, string message)
     {
         D.WL(message);
         return $"{action}";
