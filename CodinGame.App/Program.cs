@@ -283,9 +283,11 @@ public class Game
         _gs.Init();
 
         var htl = new HoldTheLine();
+        var dk = new DenyKills();
 
         var hulk = new List<StrategicMove>
         {
+            dk,
             new StayAlive(),
             //new ChargeSkill(),
             new BashSkill(),
@@ -295,6 +297,7 @@ public class Game
 
         var ironMan = new List<StrategicMove>
         {
+            dk,
             new StayAlive(scaredyCat: true),
             new BlinkSkill(),
             new FireballSkill(),
@@ -367,7 +370,7 @@ public class Game
 
     private Item ItemWorthBuying()
     {
-        if (_gs.ItemsSlotsAvailable <= 0) return null;
+        if (_gs.ItemsSlotsAvailable <= 1) return null; // Keep 1 Slot for Potions
 
         return _gs
             .Items
@@ -561,6 +564,33 @@ public class BlinkSkill : CoordinateTargetedSkillMove
 }
 #endregion
 
+public class DenyKills : StrategicMove
+{
+    private int _targetId = -1;
+
+    public override string Move(Hero hero, GameState state)
+    {
+        if (_targetId != -1 && !state.Entities.Any(x => x.UnitId == _targetId)) _targetId = -1;
+
+        var enemyHeroes = state.Entities
+            .OfType<Hero>()
+            .Where(x => x.Team != state.MyTeam)
+            .ToList();
+
+        var canDeny = state.Entities
+            .Where(x => x.Team == state.MyTeam)
+            .Where(x => (x.Health / x.MaxHealth) * 100 < 40)
+            .Where(x => enemyHeroes.Any(h => h.Distance(x) < h.AttackRange && h.AttackDamage > x.Health))
+            .Where(x => x.Distance(hero) < hero.AttackRange)
+            .FirstOrDefault();
+
+        if (canDeny == null) return string.Empty;
+
+        _targetId = canDeny.UnitId;
+        return Actions.Attack(canDeny).Debug($"{hero.Attribs.HeroType} Attemping Deny of {canDeny.UnitId}");
+    }
+}
+
 public class StayAlive : StrategicMove
 {
     private readonly bool _isPussy;
@@ -580,67 +610,46 @@ public class StayAlive : StrategicMove
 
         var fear = _isPussy
             ? threat * 2
-            : threat * 1.1;
+            : threat * 1.5;
 
         var safe = hero.Health > fear;
 
         if (safe)
         {
             var need = hero.MaxHealth - hero.Health;
+            var pc = ((float)hero.Health / hero.MaxHealth) * 100;
+            if (pc >= 50) return string.Empty;
 
-            var potion = state.Items
-                .Affordable(state.PlayerGold)
+            var bestAffordable = state.Items
                 .Where(x => x.Health > 0 && x.Health < need)
-                .OrderByDescending(x => x.Health)
+                .Where(x => x.IsInstant)
+                .OrderBy(x => x.Cost / x.Health)
+                .Affordable(state.PlayerGold)
                 .FirstOrDefault();
 
-            if (potion != null)
-                return Actions.Buy(potion).Debug($"Healed {hero.Attribs.HeroType} Via Potion!");
-
-            var pc = ((float)hero.Health / hero.MaxHealth) * 100;
-            D.WL($"{hero.Attribs.HeroType} Health {hero.Health}/{hero.MaxHealth} ({pc})");
-
-            if (pc <= 35)
+            if (bestAffordable != null)
+                return Actions.Buy(bestAffordable).Debug($"Healed {hero.Attribs.HeroType} Via Potion!");
+            else
             {
-                var tower = state.Entities
-                    .Where(x => x.Team == state.MyTeam)
-                    .Where(x => x.UnitType == Units.TOWER)
-                    .Single();
-
-                var xPos = state.MyTeam == 0
-                    ? 0
-                    : Consts.WIDTH;
-
-                if (hero.X != xPos || hero.Y != tower.Y)
-                    return Actions.Move(xPos, tower.Y).Debug($"{hero.Attribs.HeroType} Need Heal - {hero.Attribs.HeroType} RTB");
-
-                D.WL("Awaiting Heal at Tower - Keep Fighting!");
-                var nearestEnemy = state.Entities
-                    .Where(x => x.Team != state.MyTeam)
-                    .Where(x => x.Distance(hero) < hero.AttackRange)
+                var nearestGroot = state.Entities
+                    .Where(x => x.UnitType == Units.GROOT)
+                    .OrderBy(x => x.Distance(hero))
                     .FirstOrDefault();
 
-                return nearestEnemy == null
-                    ? Actions.Wait.Debug($"{hero.Attribs.HeroType} Awaiting Heal at Tower - Nothing in Range")
-                    : Actions.Attack(nearestEnemy).Debug($"{hero.Attribs.HeroType} Awaiting Heal at Tower - Attacking {nearestEnemy.UnitId}");
+                if (nearestGroot != null) return Actions.MoveAttack(nearestGroot).Debug($"{hero.Attribs.HeroType} Attacking Groot {nearestGroot.UnitId} for Med Fix");
             }
+
+            D.WL($"{hero.Attribs.HeroType} Health {hero.Health}/{hero.MaxHealth} ({pc})");
         }
 
-        return string.Empty;
+        var bush = state.Bushes.OrderBy(x => hero.Distance(x)).FirstOrDefault();
+        var tower = state.Entities.Where(x => x.Team == state.MyTeam).Where(x => x.UnitType == Units.TOWER).Single();
 
-        // TODO: Sell Item to make space?
-        // TODO: Consider attacking at range?
-
-        //var bush = state.Bushes.OrderBy(x => hero.Distance(x)).FirstOrDefault();
-        //var tower = state.Entities.Where(x => x.Team == state.MyTeam).Where(x => x.UnitType == Units.TOWER).Single();
-
-        //var bushD = hero.Distance(bush);
-        //var towerD = tower.Distance(hero);
-        //return bushD < towerD
-        //    ? Actions.Move(bush.X, bush.Y).WithMessage("To the Bush!")
-        //    : Actions.Move(tower.X, tower.Y).WithMessage("RTB");
-
-        return string.Empty;
+        var bushD = hero.Distance(bush);
+        var towerD = tower.Distance(hero);
+        return bushD < towerD
+            ? Actions.Move(bush.X, bush.Y).Debug($"{hero.Attribs.HeroType} Evac to the Bush!")
+            : Actions.Move(tower.X, tower.Y).Debug($"{hero.Attribs.HeroType} Evac to Tower");
     }
 }
 
