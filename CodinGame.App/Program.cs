@@ -736,24 +736,24 @@ public class HoldTheLine : StrategicMove
             return Actions.Move(tower.X, tower.Y).Debug($"Line Folded, {hero.Attribs.HeroType} RTB");
         }
 
-        if (state.Common.ForwardOfFrontLine(hero.X))
+        if (state.Common.ForwardOfRear(hero.X))
         {
             // Need to Get Back!
-            var xPos = state.Common.ShiftX(state.Common.MyFrontLine, -50);
+            var xPos = state.Common.ShiftX(state.Common.MyRear, -50);
             var topMost = state.Common.MyUnits.Min(x => x.Y);
-            return Actions.Move(xPos, topMost).Debug($"{hero.Attribs.HeroType}: Returning to Rear of Front Line @ {xPos},{topMost}!");
+            return Actions.Move(xPos, topMost).Debug($"{hero.Attribs.HeroType}: Returning to Rear @ {xPos},{topMost}!");
         }
 
         // Find Enemy Closest to Front Line AND in Firing Range!
         var closestWeakest = state.Common.Enemies
-            .Where(x => state.Common.ForwardOfFrontLine(x.X))
+            .Where(x => state.Common.ForwardOfRear(x.X))
             .OrderBy(x => x.Health / x.MaxHealth)
             .OrderBy(x => x.Distance(hero))
             .FirstOrDefault();
 
         if (closestWeakest == null)
         {
-            var xPos = state.Common.ShiftX(state.Common.MyFrontLine, 100);
+            var xPos = state.Common.ShiftX(state.Common.MyRear, 100);
             var topMost = state.Common.MyUnits.Min(x => x.Y);
             return Actions.Move(xPos, topMost).Debug($"{hero.Attribs.HeroType}: Moving With The Front {xPos},{topMost}!");
         }
@@ -1036,6 +1036,7 @@ public class CommonEntities
 
     public List<Entity> MyUnits { get; private set; }
     public List<Entity> EnemyUnits { get; private set; }
+    public int MyRear { get; set; }
     public int MyFrontLine { get; set; }
     public int EnemyFrontLine { get; set; }
 
@@ -1078,9 +1079,14 @@ public class CommonEntities
             .Where(x => x.UnitType == Units.UNIT)
             .ToList();
         if (MyUnits.Any())
+        {
             MyFrontLine = state.MyTeam == 0
                 ? MyUnits.Max(x => x.X)
                 : MyUnits.Min(x => x.X);
+            MyRear = state.MyTeam == 0
+                ? MyUnits.Min(x => x.X)
+                : MyUnits.Max(x => x.X);
+        }
 
         EnemyUnits = Enemies
             .Where(x => x.UnitType == Units.UNIT)
@@ -1104,6 +1110,13 @@ public class CommonEntities
         return (_state.MyTeam == 0)
             ? x > MyFrontLine
             : x < MyFrontLine;
+    }
+
+    public bool ForwardOfRear(int x)
+    {
+        return (_state.MyTeam == 0)
+            ? x > MyRear
+            : x < MyRear;
     }
 }
 
