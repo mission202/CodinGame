@@ -39,15 +39,6 @@ class Player
     }
 }
 
-/* IDEAS
- * - Hold the Line - Support Units @ Front
- *  - Prioritise attacking to nearest Hero, Melee and Ranged
- * - Use Aggro - Stay near (<300 distance) to allied units.
- * - Turtle - Stay near the tower?
- * - Fundraising - Slaughter weak units? (30 melee, 50 ranged, 300 hero)
- * - Ranged - Avoid Units and attack at range.
- */
-
 public class ScoreCriteria
 {
     public int PlayerHeroHealth { get; private set; }
@@ -285,20 +276,20 @@ public class Game
         var htl = new HoldTheLine();
         var dk = new DenyKills();
 
-        var hulk = new List<StrategicMove>
+        var drStrange = new List<StrategicMove>
         {
-            dk,
             new StayAlive(),
-            //new ChargeSkill(),
-            new BashSkill(),
-            new ExplosiveShieldSkill(),
+            dk,
+            new AoEHealSkill(),
+            new ShieldSkill(),
+            new PullSkill(),
             htl,
         };
 
         var ironMan = new List<StrategicMove>
         {
-            dk,
             new StayAlive(scaredyCat: true),
+            dk,
             new BlinkSkill(),
             new FireballSkill(),
             new BurningSkill(),
@@ -306,7 +297,7 @@ public class Game
             new RangedFighter()
         };
 
-        _strategies.Add(Heroes.Hulk.Name, hulk);
+        _strategies.Add(Heroes.DoctorStrange.Name, drStrange);
         _strategies.Add(Heroes.Ironman.Name, ironMan);
 
         _toPick = new Queue<string>(_strategies.Keys);
@@ -564,8 +555,48 @@ public class BlinkSkill : CoordinateTargetedSkillMove
 }
 #endregion
 
+#region DOCTOR_STRANGE Skills
+public class AoEHealSkill : CoordinateTargetedSkillMove
+{
+    public AoEHealSkill() : base("DOCTOR_STRANGE", "AOEHEAL", 50, 7) { }
+
+    protected override bool ShouldUse(Hero hero, GameState state)
+    {
+        // TODO: Scan for area in range with multiple teammates needing healing.
+        // Range 250
+        // Radius 100
+        return false;
+    }
+}
+
+public class ShieldSkill : UnitTargetedSkillMove
+{
+    public ShieldSkill() : base("DOCTOR_STRANGE", "SHIELD", 20, 6) { }
+
+    protected override bool ShouldUse(Hero hero, GameState state)
+    {
+        // TODO: Scan for hero in range and shield them!
+        // Probably want to prioritise based on threat to them.
+        // Range 500
+        return false;
+    }
+}
+
+public class PullSkill : UnitTargetedSkillMove
+{
+    public PullSkill() : base("DOCTOR_STRANGE", "PULL", 40, 5) { }
+
+    protected override bool ShouldUse(Hero hero, GameState state)
+    {
+        // TODO: Scan for heroes in range (300), pull them if it means they are going to get ganked by troops.
+        return false;
+    }
+}
+#endregion
+
 public class DenyKills : StrategicMove
 {
+    // TODO: 'Paint' Targets - Only Engage if Current Damage Target
     private int _targetId = -1;
 
     public override string Move(Hero hero, GameState state)
@@ -614,42 +645,41 @@ public class StayAlive : StrategicMove
 
         var safe = hero.Health > fear;
 
-        if (safe)
-        {
-            var need = hero.MaxHealth - hero.Health;
-            var pc = ((float)hero.Health / hero.MaxHealth) * 100;
-            if (pc >= 50) return string.Empty;
+        //if (safe)
+        //{
+        var need = hero.MaxHealth - hero.Health;
+        var pc = ((float)hero.Health / hero.MaxHealth) * 100;
+        if (pc >= 80 || safe) return string.Empty;
 
-            var bestAffordable = state.Items
-                .Where(x => x.Health > 0 && x.Health < need)
-                .Where(x => x.IsInstant)
-                .OrderBy(x => x.Cost / x.Health)
-                .Affordable(state.PlayerGold)
+        var bestAffordable = state.Items
+            .Where(x => x.Health > 0 && x.Health < need)
+            .Where(x => x.IsInstant)
+            .OrderBy(x => x.Cost / x.Health)
+            .Affordable(state.PlayerGold)
+            .FirstOrDefault();
+
+        if (bestAffordable != null)
+            return Actions.Buy(bestAffordable).Debug($"Healed {hero.Attribs.HeroType} Via Potion!");
+        else
+        {
+            var tower = state.Entities
+                .Where(x => x.UnitType == Units.TOWER)
+                .Where(x => x.Team == state.MyTeam)
+                .Single();
+
+            var grootNearestHome = state.Entities
+                .Where(x => x.UnitType == Units.GROOT)
+                .OrderBy(x => x.Distance(tower))
                 .FirstOrDefault();
 
-            if (bestAffordable != null)
-                return Actions.Buy(bestAffordable).Debug($"Healed {hero.Attribs.HeroType} Via Potion!");
-            else
-            {
-                var nearestGroot = state.Entities
-                    .Where(x => x.UnitType == Units.GROOT)
-                    .OrderBy(x => x.Distance(hero))
-                    .FirstOrDefault();
-
-                if (nearestGroot != null) return Actions.MoveAttack(nearestGroot).Debug($"{hero.Attribs.HeroType} Attacking Groot {nearestGroot.UnitId} for Med Fix");
-            }
-
-            D.WL($"{hero.Attribs.HeroType} Health {hero.Health}/{hero.MaxHealth} ({pc})");
+            if (grootNearestHome != null) return Actions.MoveAttack(grootNearestHome).Debug($"{hero.Attribs.HeroType} Attacking Groot {grootNearestHome.UnitId} for Med Fix");
         }
 
-        var bush = state.Bushes.OrderBy(x => hero.Distance(x)).FirstOrDefault();
-        var tower = state.Entities.Where(x => x.Team == state.MyTeam).Where(x => x.UnitType == Units.TOWER).Single();
+        D.WL($"{hero.Attribs.HeroType} Health {hero.Health}/{hero.MaxHealth} ({pc})");
+        //}
 
-        var bushD = hero.Distance(bush);
-        var towerD = tower.Distance(hero);
-        return bushD < towerD
-            ? Actions.Move(bush.X, bush.Y).Debug($"{hero.Attribs.HeroType} Evac to the Bush!")
-            : Actions.Move(tower.X, tower.Y).Debug($"{hero.Attribs.HeroType} Evac to Tower");
+        var bush = state.Bushes.OrderBy(x => hero.Distance(x)).FirstOrDefault();
+        return Actions.Move(bush.X, bush.Y).Debug($"{hero.Attribs.HeroType} Evac to the Bush!");
     }
 }
 
@@ -677,8 +707,8 @@ public class HoldTheLine : StrategicMove
         }
 
         var theFront = state.MyTeam == 0
-            ? myUnits.Max(x => x.X)
-            : myUnits.Min(x => x.X);
+            ? myUnits.Max(x => x.X) - hero.AttackRange
+            : myUnits.Min(x => x.X) + hero.AttackRange;
 
         var centreFormation = (int)myUnits.Average(x => x.Y);
 
@@ -690,12 +720,9 @@ public class HoldTheLine : StrategicMove
                 _targetId = -1;
             else
             {
-                // Only Gank if In Range of Line
-                if (unit.Distance(new Coordinate(theFront, centreFormation)) < hero.AttackRange)
-                {
-                    return Actions.MoveAttack(theFront, centreFormation, _targetId)
-                        .Debug($"Engaging Previous Target {_targetId} as In-Range");
-                }
+                // Only Gank if In Range
+                if (unit.Distance(hero) <= hero.AttackRange)
+                    return Actions.Attack(unit).Debug($"Engaging Previous Target {_targetId} as In-Range");
             }
         }
 
@@ -703,8 +730,8 @@ public class HoldTheLine : StrategicMove
         var closest = state.Entities
             .Where(x => !x.IsNeutral)
             .Where(x => x.Team != state.MyTeam)
-            .Where(x => x.Distance(new Coordinate(theFront, centreFormation)) < hero.AttackRange)
-            .OrderBy(x => x.Distance(new Coordinate(theFront, centreFormation)))
+            .Where(x => x.Distance(new Coordinate(theFront, hero.Y)) < hero.AttackRange)
+            .OrderBy(x => (x.Health / x.MaxHealth) * 100)
             .FirstOrDefault();
 
         if (closest == null)
@@ -718,7 +745,7 @@ public class HoldTheLine : StrategicMove
             : closest.X + hero.AttackRange;
 
         _targetId = closest.UnitId;
-        return Actions.MoveAttack(heroX, centreFormation, closest.UnitId).WithMessage($"Get {closest.UnitId} Off The Line!");
+        return Actions.Attack(closest).Debug($"Get {closest.UnitId} Off The Line!");
     }
 }
 
