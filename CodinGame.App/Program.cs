@@ -256,34 +256,31 @@ public class Game
             _gs.Items.ForEach(x => D.WL($"- {x.ToString()}"));
         }
 
+        var fr = new Fundraising();
         var htl = new HoldTheLine();
         var dk = new DenyKills();
         var mdk = new MurderRanged();
 
-        var drStrange = new List<StrategicMove>
+        var hulk = new List<StrategicMove>
         {
-            new StayAlive(),
-            new Fundraising(),
-            new AoEHealSkill(),
-            new ShieldSkill(),
-            //new PullSkill(),
-            htl,
+            new RunToTheBush(healthWhenToRun: 40),
+            new HealViaPotions(onPercent: 50),
+            fr,
         };
 
         var ironMan = new List<StrategicMove>
         {
-            new StayAlive(scaredyCat: true),
-            dk,
+            new RunToTheBush(healthWhenToRun: 30),
+            new HealViaPotions(onPercent: 70),
             new CashAndCarry(),
+            htl,
+            dk,
             new BlinkSkill(),
             new FireballSkill(),
             new BurningSkill(),
-            mdk,
-            htl,
-            new RangedFighter()
         };
 
-        _strategies.Add(Heroes.DoctorStrange.Name, drStrange);
+        _strategies.Add(Heroes.Hulk.Name, hulk);
         _strategies.Add(Heroes.Ironman.Name, ironMan);
 
         _toPick = new Queue<string>(_strategies.Keys);
@@ -340,42 +337,7 @@ public class DefaultAction : StrategicMove
 {
     public override string Move(Hero hero, GameState state)
     {
-        var attackRange = hero.AttackRange;
-        var friendly = state.Entities.Where(x => x.Team == state.MyTeam).ToList();
-
-        var friendlyUnits = friendly
-                .Where(x => x.UnitType == Units.UNIT)
-                .ToList();
-
-        if (!friendlyUnits.Any())
-            return new Retreat().Move(hero, state);
-
-        var enemy = state.Entities
-                .Where(x => x.Team != state.MyTeam)
-                .Where(x => x.UnitType != Units.GROOT)
-                .ToList();
-
-        const int scanRange = 2;
-        var enemyFront = state.MyTeam == 0 ? enemy.Min(x => x.X) : enemy.Max(x => x.X);
-        var rabble = (int)friendlyUnits.Average(x => x.X);
-
-        var drawingClose = state.MyTeam == 0
-            ? enemyFront < (rabble + (attackRange * scanRange))
-            : enemyFront > (rabble - (attackRange * scanRange));
-
-        if (drawingClose)
-        {
-            var target = enemy
-                .Where(x => x.X == enemyFront)
-                .OrderByDescending(x => x.AttackDamage).First();
-            return Actions.AttackNearest(target.UnitType).WithMessage($"Target : {target.UnitType}");
-        }
-
-        // Stick Close to Troops
-        var verticals = friendlyUnits.Select(x => x.Y).OrderBy(x => x).ToArray();
-        var middle = verticals.First() + ((verticals.Last() - verticals.First()) / 2);
-        var xPos = state.MyTeam == 0 ? rabble + (attackRange / 2) : rabble + (attackRange / 2);
-        return Actions.Move(xPos, middle).WithMessage("HOLD THE LINE");
+        return Actions.Wait.Debug($"{hero.Attribs.HeroType}: Nothing to Do...");
     }
 }
 
@@ -391,7 +353,7 @@ public class ChargeSkill : UnitTargetedSkillMove
             .Where(x => !x.IsNeutral)
             .Where(x => x.Team != state.MyTeam)
             .OrderByDescending(x => x.MovementSpeed) // Want to attack fastest unit due to movement speed debuff
-            .Where(x => x.Distance(hero) <= 500)
+            .Where(x => x.Distance(hero) <= 300)
             .FirstOrDefault();
 
         if (heroInRange == null) return false;
@@ -496,8 +458,11 @@ public class BlinkSkill : CoordinateTargetedSkillMove
 
     protected override bool ShouldUse(Hero hero, GameState state)
     {
-        if (hero.Attribs.MaxMana - hero.Attribs.Mana < 20) return false;
-        // TODO: Also Use for Retreat?
+        var threat = state.Common.Enemies
+            .Where(x => x.Distance(hero) <= x.AttackRange)
+            .Count();
+
+        if (threat < 2 || hero.Attribs.Mana >= 40) return false;
 
         var back200 = state.MyTeam == 0
             ? Math.Max(hero.X - 200, 0)
@@ -512,26 +477,58 @@ public class BlinkSkill : CoordinateTargetedSkillMove
 #region DOCTOR_STRANGE Skills
 public class AoEHealSkill : CoordinateTargetedSkillMove
 {
-    public AoEHealSkill() : base("DOCTOR_STRANGE", "AOEHEAL", 50, 7) { }
+    private bool _selfish;
+
+    public AoEHealSkill(bool selfish = false) : base("DOCTOR_STRANGE", "AOEHEAL", 50, 7)
+    {
+        _selfish = selfish;
+    }
 
     protected override bool ShouldUse(Hero hero, GameState state)
     {
-        // TODO: Scan for area in range with multiple teammates needing healing.
+        var target = _selfish
+            ? hero
+            : state.Common.MyHeroes.SingleOrDefault(x => x.UnitId != hero.UnitId);
+
+        if (target == null) return false;
+
+        if (target.HealthPercent <= 75)
+        {
+            Target = new Coordinate(target.X, target.Y);
+            return true;
+        }
+
+        return false;
+
+        // TODO: Scan for area in range with MULTIPLE teammates needing healing.
         // Range 250
         // Radius 100
-        return false;
     }
 }
 
 public class ShieldSkill : UnitTargetedSkillMove
 {
-    public ShieldSkill() : base("DOCTOR_STRANGE", "SHIELD", 20, 6) { }
+    private bool _selfish;
+
+    public ShieldSkill(bool selfish = false) : base("DOCTOR_STRANGE", "SHIELD", 40, 6)
+    {
+        _selfish = selfish;
+    }
 
     protected override bool ShouldUse(Hero hero, GameState state)
     {
-        // TODO: Scan for hero in range and shield them!
-        // Probably want to prioritise based on threat to them.
-        // Range 500
+        var target = _selfish
+            ? hero
+            : state.Common.MyHeroes.SingleOrDefault(x => x.UnitId != hero.UnitId);
+
+        if (target == null) return false;
+
+        if (target.HealthPercent <= 75)
+        {
+            TargetId = target.UnitId;
+            return true;
+        }
+
         return false;
     }
 }
@@ -547,6 +544,29 @@ public class PullSkill : UnitTargetedSkillMove
     }
 }
 #endregion
+
+public class RunToTheBush : StrategicMove
+{
+    private readonly int _whenToRun;
+
+    public RunToTheBush(int healthWhenToRun)
+    {
+        _whenToRun = healthWhenToRun;
+    }
+
+    public override string Move(Hero hero, GameState state)
+    {
+        if (hero.HealthPercent >= _whenToRun) return string.Empty.Debug($"{hero.Attribs.HeroType}: Don't Need to Hide! ({hero.HealthPercent} > {_whenToRun}) {hero.Health}/{hero.MaxHealth}");
+
+        var bush = state.Bushes
+            .OrderBy(x => hero.Distance(x))
+            .FirstOrDefault();
+
+        if (bush.X == hero.X && bush.Y == hero.Y) return string.Empty.Debug($"{hero.Attribs.HeroType}: They Can't See Me!");
+
+        return Actions.Move(bush).Debug($"{hero.Attribs.HeroType}: Hiding in Bush!");
+    }
+}
 
 public class Fundraising : StrategicMove
 {
@@ -565,9 +585,50 @@ public class Fundraising : StrategicMove
         }
 
         _target = target.UnitId;
-        return Actions
-            .MoveAttack(state.Common.ShiftX(target.X, -hero.AttackRange), target.Y, target.UnitId)
-            .Debug($"Killing Groot {target.UnitId}");
+
+        D.WL($"Groot {_target} D:{target.Distance(hero)}, in Range? {(target.Distance(hero) < hero.AttackRange)}");
+        var action = (target.Distance(hero) < hero.AttackRange)
+            ? Actions.Attack(target)
+            : Actions.MoveAttack(target);
+
+        return action.Debug($"Killing Groot {target.UnitId}");
+    }
+}
+
+public class HealViaPotions : StrategicMove
+{
+    private int _onPercent;
+
+    public HealViaPotions(int onPercent = 75)
+    {
+        _onPercent = onPercent;
+    }
+
+    public override string Move(Hero hero, GameState state)
+    {
+        D.WL($"{hero.Attribs.HeroType}: {hero.HealthPercent} - >= {_onPercent}? {hero.HealthPercent >= _onPercent}");
+
+        if (hero.HealthPercent >= _onPercent)
+        {
+            D.WL($"{hero.Attribs.HeroType}: Don't need health potion.");
+            return string.Empty;
+        }
+
+        var wtb = state.Items
+            .Where(x => x.IsInstant)
+            .Where(x => x.Health > 0)
+            .Affordable(state.PlayerGold)
+            .OrderBy(x => x.Health / x.Cost)
+            .FirstOrDefault();
+
+        if (wtb == null)
+        {
+            D.WL($"{hero.Attribs.HeroType}: Unable to afford heal potions.");
+            return string.Empty;
+        }
+
+        D.WL($"{hero.Attribs.HeroType}: Healing {wtb.Health}hp via {wtb.Name} for {wtb.Cost}g");
+        return $"BUY {wtb.Name}";
     }
 }
 
@@ -641,67 +702,6 @@ public class DenyKills : StrategicMove
     }
 }
 
-public class StayAlive : StrategicMove
-{
-    private readonly bool _isScaredyCat;
-
-    public StayAlive(bool scaredyCat = false)
-    {
-        _isScaredyCat = scaredyCat;
-    }
-
-    public override string Move(Hero hero, GameState state)
-    {
-        var threat = state.Entities
-            .Where(x => !x.IsNeutral)
-            .Where(x => x.Team != state.MyTeam)
-            .Where(x => x.Distance(hero) <= x.AttackRange)
-            .Sum(x => x.AttackDamage);
-
-        var fear = _isScaredyCat
-            ? threat * 2
-            : threat * 1.5;
-
-        var safe = hero.Health > fear;
-
-        //if (safe)
-        //{
-        var need = hero.MaxHealth - hero.Health;
-        var pc = ((float)hero.Health / hero.MaxHealth) * 100;
-        if (pc >= 80 || safe) return string.Empty;
-
-        var bestAffordable = state.Items
-            .Where(x => x.Health > 0 && x.Health < need)
-            .Where(x => x.IsInstant)
-            .OrderBy(x => x.Cost / x.Health)
-            .Affordable(state.PlayerGold)
-            .FirstOrDefault();
-
-        if (bestAffordable != null)
-            return Actions.Buy(bestAffordable).Debug($"Healed {hero.Attribs.HeroType} Via Potion!");
-        else
-        {
-            var tower = state.Entities
-                .Where(x => x.UnitType == Units.TOWER)
-                .Where(x => x.Team == state.MyTeam)
-                .Single();
-
-            var grootNearestHome = state.Entities
-                .Where(x => x.UnitType == Units.GROOT)
-                .OrderBy(x => x.Distance(tower))
-                .FirstOrDefault();
-
-            if (grootNearestHome != null) return Actions.MoveAttack(grootNearestHome).Debug($"{hero.Attribs.HeroType} Attacking Groot {grootNearestHome.UnitId} for Med Fix");
-        }
-
-        D.WL($"{hero.Attribs.HeroType} Health {hero.Health}/{hero.MaxHealth} ({pc})");
-        //}
-
-        var bush = state.Bushes.OrderBy(x => hero.Distance(x)).FirstOrDefault();
-        return Actions.Move(bush.X, bush.Y).Debug($"{hero.Attribs.HeroType} Evac to the Bush!");
-    }
-}
-
 public class HoldTheLine : StrategicMove
 {
     private int _targetId = -1;
@@ -747,6 +747,7 @@ public class HoldTheLine : StrategicMove
 
             _targetId = -1;
             var centreFormation = (int)myUnits.Average(x => x.Y);
+
             return Actions.Move(xPos, centreFormation).Debug($"{hero.Attribs.HeroType} To the Front {xPos},{centreFormation}!");
         }
 
@@ -784,38 +785,6 @@ public class MurderRanged : StrategicMove
 
         _target = rangedThreat.UnitId;
         return Actions.MoveAttack(rangedThreat).Debug($"Murdering Ranged {rangedThreat.UnitId}");
-    }
-}
-
-public class RangedFighter : StrategicMove
-{
-    public override string Move(Hero hero, GameState state)
-    {
-        var byDistance = state.Entities
-            .Where(x => !x.IsNeutral)
-            .Where(x => x.Team != state.MyTeam)
-            .OrderBy(x => x.Distance(hero));
-
-        var closest = byDistance.FirstOrDefault();
-
-        if (closest == null) return string.Empty;
-
-        // Keep at Arms Length
-        var moveX = state.MyTeam == 0
-            ? closest.X - hero.AttackRange
-            : closest.X + hero.AttackRange;
-
-        return Actions.MoveAttack(moveX, closest.Y, closest.UnitId);
-    }
-}
-
-public class Retreat : StrategicMove
-{
-    public override string Move(Hero hero, GameState state)
-    {
-        var friendly = state.Entities.Where(x => x.Team == state.MyTeam).ToList();
-        var tower = friendly.Where(x => x.UnitType == Units.TOWER).Single();
-        return Actions.Move(tower.X, tower.Y).WithMessage("Retreat!");
     }
 }
 
@@ -907,6 +876,7 @@ public class Entity
     public bool IsRanged => AttackRange >= 150;
     public int Health { get; private set; }
     public int MaxHealth { get; private set; }
+    public int HealthPercent => (int)(((float)Health / MaxHealth) * 100);
     public int Shield { get; private set; }
     public int AttackDamage { get; private set; }
     public int MovementSpeed { get; private set; }
@@ -1151,6 +1121,8 @@ public static class Actions
 
     public static string Attack(Entity entity) => $"ATTACK {entity.UnitId}";
     public static string Move(int x, int y) => $"MOVE {x} {y}";
+    public static string Move(Coordinate coordinate) => $"MOVE {coordinate.X} {coordinate.Y}";
+    public static string Move(Entity entity) => $"MOVE {entity.X} {entity.Y}";
     public static string MoveAttack(Entity entity) => MoveAttack(entity.X, entity.Y, entity.UnitId);
     public static string MoveAttack(int x, int y, int id) => $"MOVE_ATTACK {x} {y} {id}";
     public static string AttackNearest(string unit) => $"ATTACK_NEAREST {unit}";
