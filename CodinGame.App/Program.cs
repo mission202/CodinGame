@@ -271,13 +271,13 @@ public class Game
         var ironMan = new List<StrategicMove>
         {
             new RunToTheBush(healthWhenToRun: 30),
-            new HealViaPotions(onPercent: 70),
+            new HealViaPotions(onPercent: 50),
             new CashAndCarry(),
-            htl,
-            dk,
-            new BlinkSkill(),
             new FireballSkill(),
+            htl,
             new BurningSkill(),
+            //new BlinkSkill(),
+            dk,
         };
 
         _strategies.Add(Heroes.Hulk.Name, hulk);
