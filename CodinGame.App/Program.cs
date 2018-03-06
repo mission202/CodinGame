@@ -409,19 +409,14 @@ public class FireballSkill : CoordinateTargetedSkillMove
 
     protected override bool ShouldUse(Hero hero, GameState state)
     {
+        state.Common.EnemyHeroes.ForEach(x => D.WL($"{x.Attribs.HeroType} @ {x.Distance(hero)} > {x.MovementSpeed}"));
+
         var heroInRange = state.Common.EnemyHeroes
-            .Where(x => x.Distance(hero) <= 500) // Only Fire at Range for DMG
-            .Where(x => x.Distance(hero) <= 900)
+            .Where(x => x.Distance(hero) - x.MovementSpeed >= 700) // Only Fire at Range for DMG
+            .Where(x => x.Distance(hero) - x.MovementSpeed <= 900)
             .FirstOrDefault();
 
         if (heroInRange == null) return false;
-
-        // Splash Damage - 50px Radius
-        var nearby = state.Common.Enemies
-            .Where(x => x.Distance(heroInRange) <= 50)
-            .Count();
-
-        if (nearby < 2) return false;
 
         Target = new Coordinate(heroInRange.X, heroInRange.Y);
         return true;
@@ -737,7 +732,7 @@ public class HoldTheLine : StrategicMove
         // Find Enemy Closest to Front Line AND in Firing Range!
         var weakestInRange = state.Common.Enemies
             .Where(x => x.Distance(hero) < hero.AttackRange)
-            .OrderBy(x => (x.Health / x.MaxHealth) * 100)
+            .OrderBy(x => x.Health / x.MaxHealth)
             .FirstOrDefault();
 
         if (weakestInRange == null)
