@@ -701,57 +701,49 @@ public class DenyKills : StrategicMove
 
 public class HoldTheLine : StrategicMove
 {
-    private int _targetId = -1;
-
     public override string Move(Hero hero, GameState state)
     {
+        // Units Have Movement Speed of 150
+
         // Get the Front Line - Support their firing line!
         var myUnits = state.Common.MyUnits;
 
-        if (myUnits.Count < 2)
+        if (myUnits.Count <= 2)
         {
-            _targetId = -1;
             var tower = state.Common.MyTower;
             return Actions.Move(tower.X, tower.Y).Debug($"Line Folded, {hero.Attribs.HeroType} RTB");
         }
 
-        if (_targetId != -1)
+        if (state.Common.ForwardOfFrontLine(hero.X))
         {
-            var unit = state.Entities.SingleOrDefault(x => x.UnitId == _targetId);
-
-            if (unit == null)
-                _targetId = -1;
-            else
-            {
-                // Only Gank if In Range
-                if (unit.Distance(hero) <= hero.AttackRange)
-                    return Actions.Attack(unit).Debug($"Engaging Previous Target {_targetId} as In-Range");
-            }
+            // Need to Get Back!
+            var xPos = state.Common.ShiftX(state.Common.MyFrontLine, -50);
+            var topMost = state.Common.MyUnits.Min(x => x.Y);
+            return Actions.Move(xPos, topMost).Debug($"{hero.Attribs.HeroType}: Returning to Rear of Front Line @ {xPos},{topMost}!");
         }
 
         // Find Enemy Closest to Front Line AND in Firing Range!
-        var weakestInRange = state.Common.Enemies
-            .Where(x => x.Distance(hero) < hero.AttackRange)
+        var closestWeakest = state.Common.Enemies
+            .Where(x => state.Common.ForwardOfFrontLine(x.X))
             .OrderBy(x => x.Health / x.MaxHealth)
+            .OrderBy(x => x.Distance(hero))
             .FirstOrDefault();
 
-        if (weakestInRange == null)
+        if (closestWeakest == null)
         {
-            var firingLine = state.Common.ShiftX(
-                state.Common.MyFrontLine,
-                80 /* Melee Units Have Range of 90 */);
-            var xPos = state.Common.ShiftX(firingLine, -hero.AttackRange);
-
-            _targetId = -1;
-            var centreFormation = (int)myUnits.Average(x => x.Y);
-
-            return Actions.Move(xPos, centreFormation).Debug($"{hero.Attribs.HeroType} To the Front {xPos},{centreFormation}!");
+            var xPos = state.Common.ShiftX(state.Common.MyFrontLine, 100);
+            var topMost = state.Common.MyUnits.Min(x => x.Y);
+            return Actions.Move(xPos, topMost).Debug($"{hero.Attribs.HeroType}: Moving With The Front {xPos},{topMost}!");
         }
 
-        var heroX = state.Common.ShiftX(weakestInRange.X, -hero.AttackRange);
+        if (hero.Distance(closestWeakest) < hero.AttackRange)
+        {
+            return Actions.Attack(closestWeakest).Debug($"{hero.Attribs.HeroType}: Front Line In Range {closestWeakest.UnitId}");
+        }
 
-        _targetId = weakestInRange.UnitId;
-        return Actions.Attack(weakestInRange).Debug($"Get {weakestInRange.UnitId} Off The Line!");
+        // Move Attack
+        var heroX = state.Common.ShiftX(closestWeakest.X, -(hero.AttackRange - 30));
+        return Actions.MoveAttack(heroX, closestWeakest.Y, closestWeakest.UnitId).Debug($"{hero.Attribs.HeroType}: Moving to Attack {closestWeakest.UnitId} on Front Line");
     }
 }
 
@@ -1083,6 +1075,13 @@ public class CommonEntities
         return (_state.MyTeam == 0)
             ? x += delta
             : x -= delta;
+    }
+
+    public bool ForwardOfFrontLine(int x)
+    {
+        return (_state.MyTeam == 0)
+            ? x > MyFrontLine
+            : x < MyFrontLine;
     }
 }
 
