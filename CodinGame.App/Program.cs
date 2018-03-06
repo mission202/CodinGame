@@ -13,7 +13,8 @@ class Player
 {
     static void Main(string[] args)
     {
-        var game = new Game();
+        var game = new Game(debug: true);
+
         while (true)
         {
             try
@@ -235,13 +236,6 @@ public class GameState
         allInputs.AddRange(_turn);
         return $"{string.Join(Environment.NewLine, allInputs)}";
     }
-
-    public string Buy(Item item)
-    {
-        _carrying++;
-        PlayerGold -= item.Cost;
-        return Actions.Buy(item.Name).WithMessage("Retail Therapy");
-    }
 }
 
 public class Game
@@ -251,10 +245,16 @@ public class Game
     private Queue<string> _toPick;
     private Dictionary<string, List<StrategicMove>> _strategies = new Dictionary<string, List<StrategicMove>>();
 
-    public Game(GameState gs = null)
+    public Game(GameState gs = null, bool debug = false)
     {
         _gs = gs ?? new GameState();
         _gs.Init();
+
+        if (debug)
+        {
+            D.WL("== YE OLDE BOTTE SHOPPE ==:");
+            _gs.Items.ForEach(x => D.WL($"- {x.ToString()}"));
+        }
 
         var htl = new HoldTheLine();
         var dk = new DenyKills();
@@ -274,6 +274,7 @@ public class Game
         {
             new StayAlive(scaredyCat: true),
             dk,
+            new CashAndCarry(),
             new BlinkSkill(),
             new FireballSkill(),
             new BurningSkill(),
@@ -303,14 +304,6 @@ public class Game
 
         foreach (var controlledHero in _strategies.Keys)
         {
-            // TODO: Move Shopping to StrategicMove
-            var shopping = ItemWorthBuying();
-            if (shopping != null)
-            {
-                response.Add(_gs.Buy(shopping));
-                continue;
-            }
-
             var friendly = _gs.Entities.Where(x => x.Team == _gs.MyTeam).ToList();
             var hero = friendly.OfType<Hero>().Where(x => x.Attribs.HeroType == controlledHero).SingleOrDefault();
             if (hero == null)
@@ -340,18 +333,6 @@ public class Game
     public string Serialise()
     {
         return $"{_gs.Serialise()}";
-    }
-
-    private Item ItemWorthBuying()
-    {
-        if (_gs.ItemsSlotsAvailable <= 1) return null; // Keep 1 Slot for Potions
-
-        return _gs
-            .Items
-            .Where(x => !x.IsInstant)
-            .Affordable(_gs.PlayerGold)
-            .OrderByDescending(x => x.Damage)
-            .FirstOrDefault();
     }
 }
 
@@ -587,6 +568,57 @@ public class Fundraising : StrategicMove
         return Actions
             .MoveAttack(state.Common.ShiftX(target.X, -hero.AttackRange), target.Y, target.UnitId)
             .Debug($"Killing Groot {target.UnitId}");
+    }
+}
+
+public class CashAndCarry : StrategicMove
+{
+    private List<Item> _carrying = new List<Item>();
+
+    public override string Move(Hero hero, GameState state)
+    {
+        D.WL($"== SHOPPING! ==");
+        if (!_carrying.Any())
+            D.WL($"{hero.Attribs.HeroType}: Currently not carrying anything.");
+        else
+        {
+            D.WL($"{hero.Attribs.HeroType} carrying:");
+            _carrying.ToList().ForEach(x => D.WL($"* {x.ToString()}"));
+        }
+
+        var interesting = state.Items
+            .Where(x => !x.Name.Contains("Bronze"))
+            .Affordable(state.PlayerGold)
+            .Where(x => x.BoostsDamage)
+            .OrderBy(x => x.Damage / x.Cost)
+            .ToList();
+
+        // If we're out of slots, we need to make sure it's an improvement.
+        if (_carrying.Count >= Consts.MAX_ITEMS)
+        {
+            var worst = _carrying.OrderByDescending(x => x.Damage).First();
+            D.WL($"{hero.Attribs.HeroType}: Out of Item Slots - Ensuring Better Than {worst.Name} @ {worst.Damage}");
+
+            interesting = interesting
+                .Where(x => x.Damage > worst.Damage)
+                .ToList();
+        }
+
+        if (!interesting.Any())
+        {
+            D.WL($"{hero.Attribs.HeroType} doesn't want to buy anything");
+            return string.Empty;
+        }
+
+        D.WL($"{hero.Attribs.HeroType}: Affordable & Interesting:");
+        interesting.ForEach(x => D.WL($"- {x.ToString()}"));
+
+
+        var wtb = interesting.First();
+        D.WL($"{hero.Attribs.HeroType}: Buying {wtb.Name} @ {wtb.Damage} for {wtb.Cost}g");
+
+        _carrying.Add(wtb);
+        return $"BUY {wtb.Name}";
     }
 }
 
@@ -939,6 +971,8 @@ public class Hero : Entity
 public class Item
 {
     public string Name { get; private set; } // BRONZE>LEGENDARY BLADE=DMG BOOTS=SPEED
+    public bool BoostsDamage => Name.Contains("Blade");
+    public bool BoostsSpeed => Name.Contains("Boots");
     public int Cost { get; private set; }
     public int Damage { get; private set; }
     public int Health { get; private set; }
@@ -964,6 +998,8 @@ public class Item
         ManaRegeneration = int.Parse(inputs[8]);
         IsPotion = int.Parse(inputs[9]); // 0 if it's not instantly consumed
     }
+
+    public override string ToString() => $"{Name} {Cost}g DMG:{Damage} H:{Health} MH:{MaxHealth} M:{Mana} MM:{MaxMana} MR:{ManaRegeneration} MV:{MoveSpeed} Potion? {IsPotion} Instant? {IsInstant}";
 }
 
 public class HeroStats
