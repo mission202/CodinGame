@@ -29,7 +29,7 @@ class Player
             }
             finally
             {
-                if (true)
+                if (false)
                 {
                     D.WL("Game State:");
                     D.WL(game.Serialise());
@@ -258,6 +258,7 @@ public class Game
 
         var htl = new HoldTheLine();
         var dk = new DenyKills();
+        var mdk = new MurderRanged();
 
         var drStrange = new List<StrategicMove>
         {
@@ -266,6 +267,7 @@ public class Game
             new AoEHealSkill(),
             new ShieldSkill(),
             new PullSkill(),
+            mdk,
             htl,
         };
 
@@ -276,6 +278,7 @@ public class Game
             new BlinkSkill(),
             new FireballSkill(),
             new BurningSkill(),
+            mdk,
             htl,
             new RangedFighter()
         };
@@ -567,28 +570,19 @@ public class PullSkill : UnitTargetedSkillMove
 
 public class DenyKills : StrategicMove
 {
-    // TODO: 'Paint' Targets - Only Engage if Current Damage Target
-    private int _targetId = -1;
-
     public override string Move(Hero hero, GameState state)
     {
-        if (_targetId != -1 && !state.Entities.Any(x => x.UnitId == _targetId)) _targetId = -1;
+        var enemyHeroes = state.Common.EnemyHeroes;
 
-        var enemyHeroes = state.Entities
-            .OfType<Hero>()
-            .Where(x => x.Team != state.MyTeam)
-            .ToList();
-
-        var canDeny = state.Entities
-            .Where(x => x.Team == state.MyTeam)
-            .Where(x => (x.Health / x.MaxHealth) * 100 < 40)
+        var canDeny = state.Common.Mine
+            .Where(x => (x.Health / x.MaxHealth) * 100 < 40) /* In case I'm mega-buff :) */
+            .Where(x => x.Health <= hero.AttackDamage)
             .Where(x => enemyHeroes.Any(h => h.Distance(x) < h.AttackRange && h.AttackDamage > x.Health))
             .Where(x => x.Distance(hero) < hero.AttackRange)
+            .OrderBy(x => x.GoldValue)
             .FirstOrDefault();
 
         if (canDeny == null) return string.Empty;
-
-        _targetId = canDeny.UnitId;
         return Actions.Attack(canDeny).Debug($"{hero.Attribs.HeroType} Attemping Deny of {canDeny.UnitId}");
     }
 }
@@ -709,6 +703,36 @@ public class HoldTheLine : StrategicMove
     }
 }
 
+public class MurderRanged : StrategicMove
+{
+    private int _target = -1;
+
+    public override string Move(Hero hero, GameState state)
+    {
+        if (_target != -1)
+        {
+            var targeted = state.Entities.SingleOrDefault(x => x.UnitId == _target);
+            if (targeted == null)
+                _target = -1;
+            else
+                return Actions.MoveAttack(targeted).Debug($"Murdering Pre-Target Ranged {targeted.UnitId}");
+        }
+
+        var rangedThreat = state.Common.Enemies
+            .Where(x => x.IsRanged)
+            .Where(x => x.Distance(hero) < 300)
+            .OrderBy(x => x.Health)
+            .OrderBy(x => x.Distance(hero))
+            .FirstOrDefault();
+
+        if (rangedThreat == null)
+            return string.Empty;
+
+        _target = rangedThreat.UnitId;
+        return Actions.MoveAttack(rangedThreat).Debug($"Murdering Ranged {rangedThreat.UnitId}");
+    }
+}
+
 public class RangedFighter : StrategicMove
 {
     public override string Move(Hero hero, GameState state)
@@ -826,6 +850,7 @@ public class Entity
     public int X { get; private set; }
     public int Y { get; private set; }
     public int AttackRange { get; private set; }
+    public bool IsRanged => AttackRange >= 150;
     public int Health { get; private set; }
     public int MaxHealth { get; private set; }
     public int Shield { get; private set; }
