@@ -42,6 +42,8 @@ class Player
 
 public class ScoreCriteria
 {
+    public int PlayerHeroCount { get; private set; }
+    public int EnemyHeroCount { get; private set; }
     public int PlayerHeroHealth { get; private set; }
     public int EnemyHeroHealth { get; private set; }
     public int PlayerHealth { get; private set; }
@@ -55,13 +57,18 @@ public class ScoreCriteria
     public int PlayerGold { get; private set; }
     public int EnemyGold { get; private set; }
 
+    private ScoreCriteria() { }
+
     public ScoreCriteria(GameState state)
     {
-        var playerUnits = state.Entities.Where(x => x.Team == state.MyTeam).ToList();
-        var enemyUnits = state.Entities.Where(x => x.Team != state.MyTeam && !x.IsNeutral).ToList();
+        var playerUnits = state.Common.Mine.ToList();
+        var enemyUnits = state.Common.Enemies.ToList();
 
-        PlayerHeroHealth = playerUnits.OfType<Hero>().Sum(x => x.Health);
-        EnemyHeroHealth = enemyUnits.OfType<Hero>().Sum(x => x.Health);
+        PlayerHeroCount = state.Common.MyHeroes.Count();
+        EnemyHeroCount = state.Common.EnemyHeroes.Count();
+
+        PlayerHeroHealth = state.Common.MyHeroes.Sum(x => x.Health);
+        EnemyHeroHealth = state.Common.EnemyHeroes.Sum(x => x.Health);
 
         PlayerHealth = playerUnits.Sum(x => x.Health);
         EnemyHealth = enemyUnits.Sum(x => x.Health);
@@ -77,6 +84,48 @@ public class ScoreCriteria
 
         PlayerGold = state.PlayerGold;
         EnemyGold = state.EnemyGold;
+    }
+
+    public ScoreCriteria PlusGrootKill
+    {
+        get
+        {
+            var rtn = (ScoreCriteria)MemberwiseClone();
+            rtn.PlayerGold = PlayerGold + 150;
+            return rtn;
+        }
+    }
+
+    public ScoreCriteria Kill(Entity threat)
+    {
+        var rtn = (ScoreCriteria)MemberwiseClone();
+        rtn.PlayerHealth = PlayerHealth = threat.Health;
+        rtn.EnemyUnits = EnemyUnits - 1;
+        return rtn;
+    }
+
+    public ScoreCriteria Damage(Entity threat, Entity attacking)
+    {
+        var rtn = (ScoreCriteria)MemberwiseClone();
+        rtn.PlayerHealth = PlayerHealth = attacking.AttackDamage;
+        return rtn;
+    }
+
+    public ScoreCriteria HeroDeath(Hero hero)
+    {
+        var rtn = (ScoreCriteria)MemberwiseClone();
+        rtn.PlayerHealth = PlayerHealth - hero.Health;
+        rtn.PlayerHeroHealth = PlayerHeroHealth - hero.Health;
+        rtn.PlayerHeroCount = PlayerHeroCount - 1;
+        return rtn;
+    }
+
+    public ScoreCriteria HeroHeal(Hero hero, int healAmount)
+    {
+        var rtn = (ScoreCriteria)MemberwiseClone();
+        rtn.PlayerHealth = PlayerHealth + healAmount;
+        rtn.PlayerHeroHealth = PlayerHeroHealth + healAmount;
+        return rtn;
     }
 
     public override string ToString()
@@ -106,6 +155,7 @@ public class GameState
     public List<Entity> Entities { get; } = new List<Entity>();
     public List<Item> Items { get; } = new List<Item>();
     public List<Coordinate> Bushes { get; } = new List<Coordinate>();
+    public List<Coordinate> Spawns { get; } = new List<Coordinate>();
 
     public CommonEntities Common { get; private set; }
 
@@ -137,16 +187,16 @@ public class GameState
             input = read();
             inputs = input.Split(' ');
 
-            // TODO: Store Entities
             string entityType = inputs[0]; // BUSH, from wood1 it can also be SPAWN
             int x = int.Parse(inputs[1]);
             int y = int.Parse(inputs[2]);
             int radius = int.Parse(inputs[3]);
 
             if (entityType == Units.BUSH)
-            {
                 Bushes.Add(new Coordinate(x, y));
-            }
+
+            if (entityType == Units.SPAWN)
+                Spawns.Add(new Coordinate(x, y));
         }
         input = read();
 
@@ -238,7 +288,7 @@ public class GameState
         return $"{string.Join(Environment.NewLine, allInputs)}";
     }
 
-    internal void SetHeroes(List<HeroStats> heroes)
+    internal void SetHeroes(List<HeroBot> heroes)
     {
         heroes.ForEach(x => _toPick.Enqueue(x.Name));
     }
@@ -248,14 +298,27 @@ public class GameState
         return _toPick.Dequeue();
     }
 }
+public class MoveIdea
+{
+    public string Reason { get; private set; }
+    public string Command { get; set; }
+    public ScoreCriteria ScoreChange { get; private set; }
+
+    public MoveIdea(string command, string reason, ScoreCriteria scoreChange)
+    {
+        Command = command;
+        Reason = reason;
+        ScoreChange = scoreChange;
+    }
+}
 
 public class AI
 {
-    private readonly HeroStats[] _heroes;
+    private readonly HeroBot[] _heroes;
 
     private Dictionary<string, List<StrategicMove>> _strategies = new Dictionary<string, List<StrategicMove>>();
 
-    public AI(List<HeroStats> heroes)
+    public AI(List<HeroBot> heroes)
     {
         _heroes = heroes.ToArray();
 
@@ -284,12 +347,13 @@ public class AI
             //new BlinkSkill(),
         };
 
-        _strategies.Add(Heroes.Hulk.Name, hulk);
-        _strategies.Add(Heroes.Ironman.Name, ironMan);
+        _strategies.Add("HULK", hulk);
+        _strategies.Add("IRONMAN", ironMan);
     }
 
     public string[] GetMoves(GameState state)
     {
+        var score = new ScoreCriteria(state);
         var response = new List<string>();
 
         foreach (var hero in _heroes)
@@ -300,6 +364,30 @@ public class AI
                 D.WL($"RIP {hero.Name} :'(");
                 continue;
             }
+
+            var ideas = hero.GetIdeas(state, score);
+
+            if (ideas.Any())
+            {
+                D.WL($"Ideas from {hero.Name}:");
+                foreach (var idea in ideas)
+                {
+                    D.WL($"- {idea.Command} : {idea.Reason}");
+                }
+
+                var sorted = ideas
+                    .OrderBy(x => x.ScoreChange.PlayerHeroCount)
+                    .ThenByDescending(x => x.ScoreChange.PlayerHeroHealth)
+                    .ThenByDescending(x => x.ScoreChange.EnemyUnits)
+                    .ThenBy(x => x.ScoreChange.EnemyHealth)
+                    .ThenBy(x => x.ScoreChange.PlayerGold)
+                    .First();
+
+                response.Add(sorted.Command);
+                continue;
+            }
+            else
+                D.WL($"{hero.Name} is out of ideas.");
 
             string move = "";
             foreach (var strategy in _strategies[hero.Name])
@@ -325,7 +413,6 @@ public class Game
     private readonly GameState _gs;
     private readonly AI _brain;
 
-
     public Game(GameState gs = null, bool outputShop = false)
     {
         _gs = gs ?? new GameState();
@@ -337,10 +424,10 @@ public class Game
             _gs.Items.ForEach(x => D.WL($"- {x.ToString()}"));
         }
 
-        var heroes = new List<HeroStats>()
+        var heroes = new List<HeroBot>()
         {
-            Heroes.Hulk,
-            Heroes.Ironman
+            new HulkJungler(),
+            new IronmanRanged(),
         };
         _gs.SetHeroes(heroes);
         _brain = new AI(heroes);
@@ -349,9 +436,6 @@ public class Game
     public string[] Moves()
     {
         _gs.Turn();
-
-        var score = new ScoreCriteria(_gs);
-        //Console.Error.WriteLine(score);
 
         if (_gs.IsHeroPickRound)
             return new[] { _gs.NextHero() };
@@ -572,6 +656,7 @@ public class PullSkill : UnitTargetedSkillMove
 }
 #endregion
 
+#region MOVES
 public class HideIfAloneAndDying : StrategicMove
 {
     private readonly int _whenToRun;
@@ -829,6 +914,7 @@ public class MurderRanged : StrategicMove
         return Actions.MoveAttack(rangedThreat).Debug($"Murdering Ranged {rangedThreat.UnitId}");
     }
 }
+#endregion
 
 #region Domain Objects
 
@@ -941,6 +1027,8 @@ public class Entity
         StunDuration = stunDuration;
         GoldValue = goldValue;
     }
+
+    public override string ToString() => $"{UnitId} {Team} {AttackRange}";
 }
 
 public class Hero : Entity
@@ -1014,16 +1102,168 @@ public class Item
     public override string ToString() => $"{Name} {Cost}g DMG:{Damage} H:{Health} MH:{MaxHealth} M:{Mana} MM:{MaxMana} MR:{ManaRegeneration} MV:{MoveSpeed} Potion? {IsPotion} Instant? {IsInstant}";
 }
 
-public class HeroStats
+public class HulkJungler : HeroBot
+{
+    public HulkJungler() : base("HULK", 95)
+    {
+
+    }
+
+    protected override List<MoveIdea> GetIdeas(Hero me, GameState state, ScoreCriteria currentScore)
+    {
+        var result = new List<MoveIdea>();
+
+        // Jungler: Hide in Trees, Kill Groots (100g)
+
+        // TODO: Separate Ideas from Rating/Ordering (Role)
+        // Ideas = "What I Could Do", Priority = "Given My Role"
+
+        if (me.HealthPercent <= 25)
+        {
+            var bushAtTower = state.Bushes
+                .OrderBy(x => state.Common.MyTower.Distance(x))
+                .First();
+
+            var runCmd = me.X == bushAtTower.X && me.Y == bushAtTower.Y
+                ? Actions.Wait
+                : Actions.Move(bushAtTower);
+
+            result.Add(new MoveIdea(
+                    runCmd,
+                    $"Health Dangerously Low ({me.HealthPercent}%) - Hide!",
+                    currentScore.HeroDeath(me)));
+
+            // Can We Buy A Potion?
+            var wtb = state.Items
+                .Where(x => x.IsInstant)
+                .Where(x => x.Health > 0)
+                .Affordable(state.PlayerGold)
+                .OrderBy(x => x.Health / x.Cost)
+                .FirstOrDefault();
+
+            if (wtb != null)
+            {
+                result.Add(new MoveIdea(
+                    Actions.Buy(wtb.Name),
+                    $"Health Dangerously Low ({me.HealthPercent}%) - Heal!",
+                    currentScore
+                        .HeroHeal(me, wtb.Health)
+                        .HeroDeath(me)));
+            }
+        }
+
+        var threatsAboveLane = state.Common.Enemies
+            .Where(x => x.Y < 350)
+            .Where(x => x.Distance(me) <= x.AttackRange + Consts.SAFETY_DIST)
+            .OrderBy(x => x.Distance(me))
+            .ToList();
+
+        if (threatsAboveLane.Any())
+        {
+            foreach (var threat in threatsAboveLane)
+            {
+                /* Heroes have an attack time of 0.1 and units have an attack time of 0.2
+                 * The time used to move is distance / moveSpeed
+                 * So if your hero has 75 range and travels a distance of 100 on the map, at 200
+                 * moveSpeed, it uses up 100 / 200 = 0.5 turn time and still has half the turn
+                 * left to attack. The attack will take place at 0.5 + 0.1 since the hero is melee
+                 * in this case.
+                 */
+
+                // TODO: Calculate Properly!?
+                var threatScore = threat.Health < me.AttackDamage
+                    ? currentScore.Kill(threat)
+                    : currentScore.Damage(threat, me);
+
+                result.Add(new MoveIdea(
+                    Actions.Attack(threat),
+                    $"Threat {threat.UnitId} @ {threat.Distance(me)}",
+                    threatScore));
+            }
+        }
+
+        // No Groots Yet? Nearest Spawn to Tower
+        if (!state.Common.Groots.Any())
+        {
+            var spawn = state.Spawns
+                .OrderBy(x => state.Common.MyTower.Distance(x))
+                .First();
+
+            result.Add(new MoveIdea(
+                Actions.Move(spawn),
+                "No Groots, Spawn Camp Near Tower",
+                currentScore.PlusGrootKill));
+        }
+        else
+        {
+            var nearest = state.Common.Groots
+                .OrderBy(x => x.Distance(me))
+                .FirstOrDefault();
+
+            int nearestD = nearest.Distance(me);
+            if (nearestD <= (me.AttackRange - Consts.SAFETY_DIST))
+            {
+                result.Add(new MoveIdea(
+                    Actions.Attack(nearest),
+                    "Groot In Attack Range",
+                    currentScore.PlusGrootKill));
+            }
+            else
+            {
+                result.Add(new MoveIdea(
+                    Actions.MoveAttack(nearest),
+                    "Move to Engage Nearest Attack Range",
+                    currentScore.PlusGrootKill));
+
+                if (me.HealthPercent <= 25 && nearestD <= 150)
+                {
+                    // Likely have aggro! MUST KILL IT!
+                    result.Add(new MoveIdea(
+                        Actions.MoveAttack(nearest),
+                        "Health Critical With Aggro!",
+                        currentScore
+                            .PlusGrootKill
+                            .HeroDeath(me)));
+                }
+            }
+        }
+
+        return result;
+    }
+}
+
+public class IronmanRanged : HeroBot
+{
+
+    public IronmanRanged() : base("IRONMAN", 270)
+    {
+
+    }
+
+    protected override List<MoveIdea> GetIdeas(Hero me, GameState state, ScoreCriteria currentScore)
+    {
+        return new List<MoveIdea>();
+    }
+}
+
+public abstract class HeroBot
 {
     public string Name { get; private set; }
     public int Range { get; private set; }
 
-    public HeroStats(string name, int range)
+    public HeroBot(string name, int range)
     {
         Name = name;
         Range = range;
     }
+
+    public List<MoveIdea> GetIdeas(GameState state, ScoreCriteria currentScore)
+    {
+        var me = state.Common.MyHeroes.Where(x => x.Attribs.HeroType == Name).Single();
+        return GetIdeas(me, state, currentScore);
+    }
+
+    protected abstract List<MoveIdea> GetIdeas(Hero hero, GameState state, ScoreCriteria currentScore);
 }
 
 public static class Units
@@ -1199,30 +1439,12 @@ public static class Actions
     }
 }
 
-public static class Heroes
-{
-    private static readonly Dictionary<string, HeroStats> _heroes = new Dictionary<string, HeroStats>
-    {
-        { "DEADPOOL", new HeroStats("DEADPOOL", 110) },
-        { "DOCTOR_STRANGE", new HeroStats("DOCTOR_STRANGE", 245) },
-        { "HULK", new HeroStats("HULK", 95) },
-        { "IRONMAN", new HeroStats("IRONMAN", 270) },
-        { "VALKYRIE", new HeroStats("VALKYRIE", 130) },
-        // TODO: Valkyrie
-    };
-
-    public static HeroStats Deadpool => _heroes["DEADPOOL"];
-    public static HeroStats DoctorStrange => _heroes["DOCTOR_STRANGE"];
-    public static HeroStats Hulk => _heroes["HULK"];
-    public static HeroStats Ironman => _heroes["IRONMAN"];
-    public static HeroStats Valkyrie => _heroes["VALKYRIE"];
-}
-
 public static class Consts
 {
     public const int MAX_ITEMS = 4;
     public const int WIDTH = 1920;
     public const int HEIGHT = 750;
+    public const int SAFETY_DIST = 5;
 }
 
 #endregion
