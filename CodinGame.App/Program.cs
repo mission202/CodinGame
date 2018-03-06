@@ -106,15 +106,15 @@ public class GameState
     public List<Item> Items { get; } = new List<Item>();
     public List<Coordinate> Bushes { get; } = new List<Coordinate>();
 
+    public CommonEntities Common { get; private set; }
+
     private int _carrying = 0;
     public int ItemsSlotsAvailable => Consts.MAX_ITEMS - _carrying;
 
     protected Func<string> _inputSource = Console.ReadLine;
 
-
     private readonly Queue<string> _init = new Queue<string>();
     private readonly Queue<string> _turn = new Queue<string>();
-    private readonly Dictionary<string, string> _stateBag = new Dictionary<string, string>();
 
     public void Init()
     {
@@ -224,6 +224,8 @@ public class GameState
 
             Entities.Add(entity);
         }
+
+        Common = new CommonEntities(this, Entities);
     }
 
     public string Serialise()
@@ -239,25 +241,6 @@ public class GameState
         _carrying++;
         PlayerGold -= item.Cost;
         return Actions.Buy(item.Name).WithMessage("Retail Therapy");
-    }
-
-    public void SetState(string key, string value)
-    {
-        if (_stateBag.ContainsKey(key))
-        {
-            _stateBag[key] = value;
-        }
-        else
-        {
-            _stateBag.Add(key, value);
-        }
-    }
-
-    public string GetState(string key)
-    {
-        return _stateBag.ContainsKey(key)
-            ? _stateBag[key]
-            : string.Empty;
     }
 }
 
@@ -301,8 +284,6 @@ public class Game
         _strategies.Add(Heroes.Ironman.Name, ironMan);
 
         _toPick = new Queue<string>(_strategies.Keys);
-
-        // TODO: Store IDs to Common Entities (e.g. Heroes, Towers etc.)
     }
 
     public string[] Moves()
@@ -483,10 +464,7 @@ public class FireballSkill : CoordinateTargetedSkillMove
 
     protected override bool ShouldUse(Hero hero, GameState state)
     {
-        var heroInRange = state.Entities
-            .OfType<Hero>()
-            .Where(x => !x.IsNeutral)
-            .Where(x => x.Team != state.MyTeam)
+        var heroInRange = state.Common.EnemyHeroes
             .Where(x => x.Distance(hero) <= 500) // Only Fire at Range for DMG
             .Where(x => x.Distance(hero) <= 900)
             .FirstOrDefault();
@@ -494,9 +472,7 @@ public class FireballSkill : CoordinateTargetedSkillMove
         if (heroInRange == null) return false;
 
         // Splash Damage - 50px Radius
-        var nearby = state.Entities
-            .Where(x => !x.IsNeutral)
-            .Where(x => x.Team != state.MyTeam)
+        var nearby = state.Common.Enemies
             .Where(x => x.Distance(heroInRange) <= 50)
             .Count();
 
@@ -513,19 +489,14 @@ public class BurningSkill : CoordinateTargetedSkillMove
 
     protected override bool ShouldUse(Hero hero, GameState state)
     {
-        var heroInRange = state.Entities
-            .OfType<Hero>()
-            .Where(x => !x.IsNeutral)
-            .Where(x => x.Team != state.MyTeam)
+        var heroInRange = state.Common.EnemyHeroes
             .Where(x => x.Distance(hero) <= 250)
             .FirstOrDefault();
 
         if (heroInRange == null) return false;
 
         // Splash Damage - 100px Radius
-        var nearby = state.Entities
-            .Where(x => !x.IsNeutral)
-            .Where(x => x.Team != state.MyTeam)
+        var nearby = state.Common.Enemies
             .Where(x => x.Distance(heroInRange) <= 100)
             .Count();
 
@@ -771,58 +742,6 @@ public class RangedFighter : StrategicMove
     }
 }
 
-public class Tanking : StrategicMove
-{
-    public override string Move(Hero hero, GameState state)
-    {
-        var byDistance = state.Entities
-            .Where(x => !x.IsNeutral)
-            .Where(x => x.Team != state.MyTeam)
-            .OrderBy(x => x.Distance(hero));
-
-        var closest = byDistance.FirstOrDefault();
-
-        // Charge!
-        if (closest == null || closest.Distance(hero) > 500) return string.Empty;
-
-        if (closest.Distance(hero) < hero.AttackRange)
-        {
-            var threatCount = byDistance.Where(x => x.Distance(hero) < x.AttackRange).Count();
-
-            if (threatCount > 2)
-            {
-                var shieldState = int.TryParse(state.GetState("HULK_SHIELD"), out var shieldCD);
-                if (shieldState)
-                {
-                    if (shieldCD > 1)
-                    {
-                        state.SetState("HULK_SHIELD", (--shieldCD).ToString());
-                        return Actions.MoveAttack(closest);
-                    }
-                }
-
-                state.SetState("HULK_SHIELD", "8");
-                return $"EXPLOSIVESHIELD";
-            }
-
-            return Actions.MoveAttack(closest);
-        }
-
-        var inState = int.TryParse(state.GetState("HULK_CHARGE"), out var coolDown);
-        if (inState)
-        {
-            if (coolDown > 1)
-            {
-                state.SetState("HULK_CHARGE", (--coolDown).ToString());
-                return Actions.MoveAttack(closest).WithMessage($"HULK COOLING {coolDown}");
-            }
-        }
-
-        state.SetState("HULK_CHARGE", "8");
-        return $"CHARGE {closest.UnitId}".WithMessage($"HULK GET {closest.UnitType} {closest.UnitId}!");
-    }
-}
-
 public class Retreat : StrategicMove
 {
     public override string Move(Hero hero, GameState state)
@@ -1043,6 +962,53 @@ public struct Coordinate
     {
         X = x;
         Y = y;
+    }
+}
+
+public class CommonEntities
+{
+    private readonly GameState _state;
+    private readonly List<Entity> _entities;
+
+    public List<Entity> Mine { get; private set; }
+    public List<Entity> Enemies { get; private set; }
+    public List<Entity> Neutral { get; private set; }
+
+    public Entity MyTower { get; private set; }
+    public Entity EnemyTower { get; private set; }
+
+    public List<Hero> MyHeroes { get; private set; }
+    public List<Hero> EnemyHeroes { get; private set; }
+
+    public CommonEntities(GameState state, List<Entity> entities)
+    {
+        _state = state;
+        _entities = entities;
+
+        Mine = entities
+            .Where(x => x.Team == state.MyTeam)
+            .ToList();
+        Enemies = entities
+            .Where(x => x.Team != state.MyTeam)
+            .Where(x => !x.IsNeutral)
+            .ToList();
+        Neutral = entities
+            .Where(x => x.IsNeutral)
+            .ToList();
+
+        MyTower = Mine
+            .Where(x => x.UnitType == Units.TOWER)
+            .FirstOrDefault();
+        EnemyTower = Enemies
+            .Where(x => x.UnitType == Units.TOWER)
+            .FirstOrDefault();
+
+        MyHeroes = Mine
+            .OfType<Hero>()
+            .ToList();
+        EnemyHeroes = Enemies
+            .OfType<Hero>()
+            .ToList();
     }
 }
 
