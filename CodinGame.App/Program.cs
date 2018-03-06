@@ -273,12 +273,12 @@ public class Game
         {
             new HideIfAloneAndDying(30),
             new HealViaPotions(onPercent: 50),
+            dk,
             new CashAndCarry(),
             new FireballSkill(),
             htl,
             new BurningSkill(),
             //new BlinkSkill(),
-            dk,
         };
 
         _strategies.Add(Heroes.Hulk.Name, hulk);
