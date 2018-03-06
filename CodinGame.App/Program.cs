@@ -13,7 +13,7 @@ class Player
 {
     static void Main(string[] args)
     {
-        var game = new Game(debug: true);
+        var game = new Game(outputShop: true);
 
         while (true)
         {
@@ -114,6 +114,7 @@ public class GameState
 
     protected Func<string> _inputSource = Console.ReadLine;
 
+    private readonly Queue<string> _toPick = new Queue<string>();
     private readonly Queue<string> _init = new Queue<string>();
     private readonly Queue<string> _turn = new Queue<string>();
 
@@ -236,25 +237,27 @@ public class GameState
         allInputs.AddRange(_turn);
         return $"{string.Join(Environment.NewLine, allInputs)}";
     }
+
+    internal void SetHeroes(List<HeroStats> heroes)
+    {
+        heroes.ForEach(x => _toPick.Enqueue(x.Name));
+    }
+
+    internal string NextHero()
+    {
+        return _toPick.Dequeue();
+    }
 }
 
-public class Game
+public class AI
 {
-    private readonly GameState _gs;
+    private readonly HeroStats[] _heroes;
 
-    private Queue<string> _toPick;
     private Dictionary<string, List<StrategicMove>> _strategies = new Dictionary<string, List<StrategicMove>>();
 
-    public Game(GameState gs = null, bool debug = false)
+    public AI(List<HeroStats> heroes)
     {
-        _gs = gs ?? new GameState();
-        _gs.Init();
-
-        if (debug)
-        {
-            D.WL("== YE OLDE BOTTE SHOPPE ==:");
-            _gs.Items.ForEach(x => D.WL($"- {x.ToString()}"));
-        }
+        _heroes = heroes.ToArray();
 
         var fr = new Fundraising();
         var htl = new HoldTheLine();
@@ -283,8 +286,64 @@ public class Game
 
         _strategies.Add(Heroes.Hulk.Name, hulk);
         _strategies.Add(Heroes.Ironman.Name, ironMan);
+    }
 
-        _toPick = new Queue<string>(_strategies.Keys);
+    public string[] GetMoves(GameState state)
+    {
+        var response = new List<string>();
+
+        foreach (var hero in _heroes)
+        {
+            var entity = state.Common.MyHeroes.SingleOrDefault(x => x.Attribs.HeroType == hero.Name);
+            if (entity == null)
+            {
+                D.WL($"RIP {hero.Name} :'(");
+                continue;
+            }
+
+            string move = "";
+            foreach (var strategy in _strategies[hero.Name])
+            {
+                move = strategy.Move(entity, state);
+                if (!string.IsNullOrWhiteSpace(move))
+                {
+                    response.Add(move);
+                    break;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(move))
+                response.Add(new DefaultAction().Move(entity, state));
+        }
+
+        return response.ToArray();
+    }
+}
+
+public class Game
+{
+    private readonly GameState _gs;
+    private readonly AI _brain;
+
+
+    public Game(GameState gs = null, bool outputShop = false)
+    {
+        _gs = gs ?? new GameState();
+        _gs.Init();
+
+        if (outputShop)
+        {
+            D.WL("== YE OLDE BOTTE SHOPPE ==");
+            _gs.Items.ForEach(x => D.WL($"- {x.ToString()}"));
+        }
+
+        var heroes = new List<HeroStats>()
+        {
+            Heroes.Hulk,
+            Heroes.Ironman
+        };
+        _gs.SetHeroes(heroes);
+        _brain = new AI(heroes);
     }
 
     public string[] Moves()
@@ -294,38 +353,10 @@ public class Game
         var score = new ScoreCriteria(_gs);
         //Console.Error.WriteLine(score);
 
-        // TODO: Heroes should be in GS.
         if (_gs.IsHeroPickRound)
-            return new[] { _toPick.Dequeue() };
+            return new[] { _gs.NextHero() };
 
-        var response = new List<string>();
-
-        foreach (var controlledHero in _strategies.Keys)
-        {
-            var friendly = _gs.Entities.Where(x => x.Team == _gs.MyTeam).ToList();
-            var hero = friendly.OfType<Hero>().Where(x => x.Attribs.HeroType == controlledHero).SingleOrDefault();
-            if (hero == null)
-            {
-                D.WL($"RIP {controlledHero} :'(");
-                continue;
-            }
-
-            string move = "";
-            foreach (var strategy in _strategies[controlledHero])
-            {
-                move = strategy.Move(hero, _gs);
-                if (!string.IsNullOrWhiteSpace(move))
-                {
-                    response.Add(move);
-                    break;
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(move))
-                response.Add(new DefaultAction().Move(hero, _gs));
-        }
-
-        return response.ToArray();
+        return _brain.GetMoves(_gs);
     }
 
     public string Serialise()
