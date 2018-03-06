@@ -271,8 +271,7 @@ public class Game
 
         var ironMan = new List<StrategicMove>
         {
-            new HideIfAloneAndDying(15),
-            new RunToTheBush(healthWhenToRun: 30),
+            new HideIfAloneAndDying(30),
             new HealViaPotions(onPercent: 50),
             new CashAndCarry(),
             new FireballSkill(),
