@@ -559,6 +559,7 @@ public class RunToTheBush : StrategicMove
         if (hero.HealthPercent >= _whenToRun) return string.Empty.Debug($"{hero.Attribs.HeroType}: Don't Need to Hide! ({hero.HealthPercent} > {_whenToRun}) {hero.Health}/{hero.MaxHealth}");
 
         var bush = state.Bushes
+            .Where(x => state.Common.EnemyTower.Distance(x) > 500)
             .OrderBy(x => hero.Distance(x))
             .FirstOrDefault();
 
@@ -575,6 +576,7 @@ public class Fundraising : StrategicMove
     {
         var target = state.Common.Groots.SingleOrDefault(x => x.UnitId == _target)
             ?? state.Common.Groots
+                .Where(x => state.Common.EnemyTower.Distance(x) > 500)
                 .OrderBy(x => x.Distance(hero))
                 .FirstOrDefault();
 
