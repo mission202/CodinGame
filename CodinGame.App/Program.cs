@@ -263,11 +263,10 @@ public class Game
         var drStrange = new List<StrategicMove>
         {
             new StayAlive(),
-            dk,
+            new Fundraising(),
             new AoEHealSkill(),
             new ShieldSkill(),
-            new PullSkill(),
-            mdk,
+            //new PullSkill(),
             htl,
         };
 
@@ -568,6 +567,29 @@ public class PullSkill : UnitTargetedSkillMove
 }
 #endregion
 
+public class Fundraising : StrategicMove
+{
+    private int _target = -1;
+    public override string Move(Hero hero, GameState state)
+    {
+        var target = state.Common.Groots.SingleOrDefault(x => x.UnitId == _target)
+            ?? state.Common.Groots
+                .OrderBy(x => x.Distance(hero))
+                .FirstOrDefault();
+
+        if (target == null)
+        {
+            _target = -1;
+            return string.Empty;
+        }
+
+        _target = target.UnitId;
+        return Actions
+            .MoveAttack(state.Common.ShiftX(target.X, -hero.AttackRange), target.Y, target.UnitId)
+            .Debug($"Killing Groot {target.UnitId}");
+    }
+}
+
 public class DenyKills : StrategicMove
 {
     public override string Move(Hero hero, GameState state)
@@ -589,11 +611,11 @@ public class DenyKills : StrategicMove
 
 public class StayAlive : StrategicMove
 {
-    private readonly bool _isPussy;
+    private readonly bool _isScaredyCat;
 
     public StayAlive(bool scaredyCat = false)
     {
-        _isPussy = scaredyCat;
+        _isScaredyCat = scaredyCat;
     }
 
     public override string Move(Hero hero, GameState state)
@@ -604,7 +626,7 @@ public class StayAlive : StrategicMove
             .Where(x => x.Distance(hero) <= x.AttackRange)
             .Sum(x => x.AttackDamage);
 
-        var fear = _isPussy
+        var fear = _isScaredyCat
             ? threat * 2
             : threat * 1.5;
 
@@ -987,6 +1009,7 @@ public class CommonEntities
     public List<Entity> Mine { get; private set; }
     public List<Entity> Enemies { get; private set; }
     public List<Entity> Neutral { get; private set; }
+    public List<Entity> Groots { get; private set; }
 
     public Entity MyTower { get; private set; }
     public Entity EnemyTower { get; private set; }
@@ -1013,6 +1036,9 @@ public class CommonEntities
             .ToList();
         Neutral = entities
             .Where(x => x.IsNeutral)
+            .ToList();
+        Groots = entities
+            .Where(x => x.UnitType == Units.GROOT)
             .ToList();
 
         if (!Mine.Any() || !Enemies.Any()) return;
