@@ -263,6 +263,7 @@ public class Game
 
         var hulk = new List<StrategicMove>
         {
+            new HideIfAloneAndDying(15),
             new RunToTheBush(healthWhenToRun: 40),
             new HealViaPotions(onPercent: 50),
             fr,
@@ -270,6 +271,7 @@ public class Game
 
         var ironMan = new List<StrategicMove>
         {
+            new HideIfAloneAndDying(15),
             new RunToTheBush(healthWhenToRun: 30),
             new HealViaPotions(onPercent: 50),
             new CashAndCarry(),
@@ -539,6 +541,27 @@ public class PullSkill : UnitTargetedSkillMove
     }
 }
 #endregion
+
+public class HideIfAloneAndDying : StrategicMove
+{
+    private readonly int _whenToRun;
+
+    public HideIfAloneAndDying(int healthWhenToRun)
+    {
+        _whenToRun = healthWhenToRun;
+    }
+
+    public override string Move(Hero hero, GameState state)
+    {
+        if (hero.HealthPercent >= _whenToRun || state.Common.MyHeroes.Count == 2) return string.Empty;
+
+        var bush = state.Bushes
+            .OrderBy(x => state.Common.MyTower.Distance(x))
+            .FirstOrDefault();
+
+        return Actions.Move(bush).Debug($"{hero.Attribs.HeroType}: Alone and Dying! Save me Tower!");
+    }
+}
 
 public class RunToTheBush : StrategicMove
 {
