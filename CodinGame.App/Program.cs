@@ -40,6 +40,35 @@ class Player
     }
 }
 
+public class IdeaResult
+{
+    public int MyHeroDeaths { get; private set; }
+    public int MyHealth { get; private set; }
+    public int EnemyHeroDeaths { get; private set; }
+    public int EnemyUnitDeaths { get; private set; }
+    public int EnemyHealth { get; private set; }
+    public int MyGoldEarned { get; private set; }
+
+    public IdeaResult(
+        int myHeroDeaths = 0,
+        int myHealth = 0,
+        int enemyHeroDeaths = 0,
+        int enemyUnitDeaths = 0,
+        int enemyHealth = 0,
+        int myGoldEarned = 0)
+    {
+        MyHeroDeaths = myHeroDeaths;
+        MyHealth = myHealth;
+        EnemyHeroDeaths = enemyHeroDeaths;
+        EnemyUnitDeaths = enemyUnitDeaths;
+        EnemyHealth = enemyHealth;
+        MyGoldEarned = myGoldEarned;
+    }
+
+    public static IdeaResult HeroDeath(Hero hero) => new IdeaResult(myHeroDeaths: 1, myHealth: -hero.Health);
+    public static IdeaResult GrootKill => new IdeaResult(myGoldEarned: 150);
+}
+
 public class ScoreCriteria
 {
     public int PlayerHeroCount { get; private set; }
@@ -84,16 +113,6 @@ public class ScoreCriteria
 
         PlayerGold = state.PlayerGold;
         EnemyGold = state.EnemyGold;
-    }
-
-    public ScoreCriteria PlusGrootKill
-    {
-        get
-        {
-            var rtn = (ScoreCriteria)MemberwiseClone();
-            rtn.PlayerGold = PlayerGold + 150;
-            return rtn;
-        }
     }
 
     public ScoreCriteria Kill(Entity threat)
@@ -302,13 +321,13 @@ public class MoveIdea
 {
     public string Reason { get; private set; }
     public string Command { get; set; }
-    public ScoreCriteria ScoreChange { get; private set; }
+    public IdeaResult Result { get; private set; }
 
-    public MoveIdea(string command, string reason, ScoreCriteria scoreChange)
+    public MoveIdea(string command, string reason, IdeaResult expResult)
     {
         Command = command;
         Reason = reason;
-        ScoreChange = scoreChange;
+        Result = expResult;
     }
 }
 
@@ -375,15 +394,7 @@ public class AI
                     D.WL($"- {idea.Command} : {idea.Reason}");
                 }
 
-                var sorted = ideas
-                    .OrderBy(x => x.ScoreChange.PlayerHeroCount)
-                    .ThenByDescending(x => x.ScoreChange.PlayerHeroHealth)
-                    .ThenByDescending(x => x.ScoreChange.EnemyUnits)
-                    .ThenBy(x => x.ScoreChange.EnemyHealth)
-                    .ThenBy(x => x.ScoreChange.PlayerGold)
-                    .First();
-
-                response.Add(sorted.Command);
+                response.Add(ideas.First().Command);
                 continue;
             }
             else
@@ -1131,7 +1142,7 @@ public class HulkJungler : HeroBot
             result.Add(new MoveIdea(
                     runCmd,
                     $"Health Dangerously Low ({me.HealthPercent}%) - Hide!",
-                    currentScore.HeroDeath(me)));
+                    IdeaResult.HeroDeath(me)));
 
             // Can We Buy A Potion?
             var wtb = state.Items
@@ -1146,9 +1157,7 @@ public class HulkJungler : HeroBot
                 result.Add(new MoveIdea(
                     Actions.Buy(wtb.Name),
                     $"Health Dangerously Low ({me.HealthPercent}%) - Heal!",
-                    currentScore
-                        .HeroHeal(me, wtb.Health)
-                        .HeroDeath(me)));
+                    new IdeaResult(myHeroDeaths: 1, myHealth: wtb.Health)));
             }
         }
 
@@ -1172,8 +1181,8 @@ public class HulkJungler : HeroBot
 
                 // TODO: Calculate Properly!?
                 var threatScore = threat.Health < me.AttackDamage
-                    ? currentScore.Kill(threat)
-                    : currentScore.Damage(threat, me);
+                    ? new IdeaResult(enemyUnitDeaths: 1, enemyHealth: -threat.Health)
+                    : new IdeaResult(enemyHealth: -threat.Health);
 
                 result.Add(new MoveIdea(
                     Actions.Attack(threat),
@@ -1192,7 +1201,7 @@ public class HulkJungler : HeroBot
             result.Add(new MoveIdea(
                 Actions.Move(spawn),
                 "No Groots, Spawn Camp Near Tower",
-                currentScore.PlusGrootKill));
+                IdeaResult.GrootKill));
         }
         else
         {
@@ -1206,14 +1215,14 @@ public class HulkJungler : HeroBot
                 result.Add(new MoveIdea(
                     Actions.Attack(nearest),
                     "Groot In Attack Range",
-                    currentScore.PlusGrootKill));
+                    IdeaResult.GrootKill));
             }
             else
             {
                 result.Add(new MoveIdea(
                     Actions.MoveAttack(nearest),
                     "Move to Engage Nearest Attack Range",
-                    currentScore.PlusGrootKill));
+                    IdeaResult.GrootKill));
 
                 if (me.HealthPercent <= 25 && nearestD <= 150)
                 {
@@ -1221,14 +1230,35 @@ public class HulkJungler : HeroBot
                     result.Add(new MoveIdea(
                         Actions.MoveAttack(nearest),
                         "Health Critical With Aggro!",
-                        currentScore
-                            .PlusGrootKill
-                            .HeroDeath(me)));
+                        new IdeaResult(myGoldEarned: 150, myHeroDeaths: 1, myHealth: -me.Health)));
                 }
             }
         }
 
-        return result;
+        var scored = result.Select(x => new
+        {
+            Idea = x,
+            Score = (
+                1000 * x.Result.MyHeroDeaths +
+                 100 * x.Result.MyHealth +
+                  10 * x.Result.EnemyHealth +
+                   1 * x.Result.MyGoldEarned
+            )
+        });
+
+        var sorted = scored.OrderByDescending(x => x.Score);
+
+        D.WL($"Score Ideas:");
+        sorted.ToList().ForEach(x => D.WL($"{x.Score}pts - {x.Idea.Command}: {x.Idea.Reason}"));
+
+        return sorted.Select(x => x.Idea).ToList();
+        //return result
+        //    .OrderBy(x => x.ScoreChange.PlayerHeroCount)
+        //    .ThenByDescending(x => x.ScoreChange.PlayerHeroHealth)
+        //    .ThenByDescending(x => x.ScoreChange.EnemyUnits)
+        //    .ThenBy(x => x.ScoreChange.EnemyHealth)
+        //    .ThenBy(x => x.ScoreChange.PlayerGold)
+        //    .ToList();
     }
 }
 
