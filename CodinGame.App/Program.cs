@@ -44,6 +44,7 @@ public class IdeaResult
 {
     public int MyHeroDeaths { get; private set; }
     public int MyHealth { get; private set; }
+    public int MyDamage { get; private set; }
     public int EnemyHeroDeaths { get; private set; }
     public int EnemyUnitDeaths { get; private set; }
     public int EnemyHealth { get; private set; }
@@ -52,6 +53,7 @@ public class IdeaResult
     public IdeaResult(
         int myHeroDeaths = 0,
         int myHealth = 0,
+        int myDamage = 0,
         int enemyHeroDeaths = 0,
         int enemyUnitDeaths = 0,
         int enemyHealth = 0,
@@ -59,6 +61,7 @@ public class IdeaResult
     {
         MyHeroDeaths = myHeroDeaths;
         MyHealth = myHealth;
+        MyDamage = myDamage;
         EnemyHeroDeaths = enemyHeroDeaths;
         EnemyUnitDeaths = enemyUnitDeaths;
         EnemyHealth = enemyHealth;
@@ -67,6 +70,8 @@ public class IdeaResult
 
     public static IdeaResult HeroDeath(Hero hero) => new IdeaResult(myHeroDeaths: 1, myHealth: hero.Health);
     public static IdeaResult GrootKill => new IdeaResult(myGoldEarned: 150);
+
+    public override string ToString() => $"MyHeroDeaths:{MyHeroDeaths} MyHealth:{MyHealth} MyDamage:{MyDamage} EnemyHeroDeaths:{EnemyHeroDeaths} EnemyUnitDeaths:{EnemyUnitDeaths}  EnemyHealth:{EnemyHealth} MyGoldEarned:{MyGoldEarned}";
 }
 
 public class ScoreCriteria
@@ -392,7 +397,7 @@ public class AI
                 D.WL($"Ideas from {hero.Name}:");
                 foreach (var idea in ideas)
                 {
-                    D.WL($"  - {idea.Command} : {idea.Reason}");
+                    D.WL($"  - {idea.Command} : {idea.Reason} ({idea.Result})");
                 }
 
                 response.Add(ideas.First().Command);
@@ -439,7 +444,7 @@ public class Game
         var heroes = new List<HeroBot>()
         {
             new HulkJungler(),
-            new IronmanRanged(),
+            new IronmanCarry(),
         };
         _gs.SetHeroes(heroes);
         _brain = new AI(heroes);
@@ -451,6 +456,9 @@ public class Game
 
         if (_gs.IsHeroPickRound)
             return new[] { _gs.NextHero() };
+
+        D.WL($"{_gs.Entities.Count()} Units:");
+        _gs.Entities.ForEach(x => D.WL($" - {x.ToString()}"));
 
         return _brain.GetMoves(_gs);
     }
@@ -1040,7 +1048,7 @@ public class Entity
         GoldValue = goldValue;
     }
 
-    public override string ToString() => $"{UnitId} {Team} {AttackRange}";
+    public override string ToString() => $"{UnitType} #{UnitId} {Team} {Health}/{MaxHealth}hp {AttackDamage}dmg @ {AttackRange} (Ranged? {IsRanged}) {MovementSpeed}px";
 }
 
 public class Hero : Entity
@@ -1242,37 +1250,20 @@ public class HulkJungler : HeroBot
             }
         }
 
-        var scored = result.Select(x => new
-        {
-            Idea = x,
-            Score = (
-                1000 * x.Result.MyHeroDeaths +
-                 100 * x.Result.MyHealth +
-                  10 * x.Result.EnemyHealth +
-                   1 * x.Result.MyGoldEarned
-            )
-        });
-
-        var sorted = scored.OrderByDescending(x => x.Score);
-
-        D.WL($"{me.Attribs.HeroType} Score Ideas:");
-        sorted.ToList().ForEach(x => D.WL($"  - {x.Score}pts - {x.Idea.Command}: {x.Idea.Reason}"));
-
-        return sorted.Select(x => x.Idea).ToList();
-        //return result
-        //    .OrderBy(x => x.ScoreChange.PlayerHeroCount)
-        //    .ThenByDescending(x => x.ScoreChange.PlayerHeroHealth)
-        //    .ThenByDescending(x => x.ScoreChange.EnemyUnits)
-        //    .ThenBy(x => x.ScoreChange.EnemyHealth)
-        //    .ThenBy(x => x.ScoreChange.PlayerGold)
-        //    .ToList();
+        return result
+            .OrderByDescending(x => x.Result.MyHeroDeaths)
+            .ThenByDescending(x => x.Result.MyGoldEarned)
+            .ThenByDescending(x => x.Result.MyHealth)
+            .ThenByDescending(x => x.Result.MyDamage)
+            .ThenBy(x => x.Result.EnemyHealth)
+            .ToList();
     }
 }
 
-public class IronmanRanged : HeroBot
+public class IronmanCarry : HeroBot
 {
 
-    public IronmanRanged() : base("IRONMAN", 270)
+    public IronmanCarry() : base("IRONMAN", 270)
     {
 
     }
@@ -1282,7 +1273,40 @@ public class IronmanRanged : HeroBot
         // Find Bush Closest to Front, Hide in it. Kill enemies in range/spells
         var result = new List<MoveIdea>();
 
-        // Check for Enemnies in Range
+        // TODO: Finish This Up! Detect Threat vs. Health?
+        if (me.Health <= 100)
+        {
+            var bushAtTower = state.Bushes
+                .OrderBy(x => state.Common.MyTower.Distance(x))
+                .First();
+
+            var runCmd = me.X == bushAtTower.X && me.Y == bushAtTower.Y
+                ? Actions.Wait
+                : Actions.Move(bushAtTower);
+
+            result.Add(new MoveIdea(
+                    runCmd,
+                    $"Health Dangerously Low ({me.HealthPercent}%) - Hide!",
+                    IdeaResult.HeroDeath(me)));
+
+            // Can We Buy A Potion?
+            var wtb = state.Items
+                .Where(x => x.IsInstant)
+                .Where(x => x.Health > 0)
+                .Affordable(state.PlayerGold)
+                .OrderBy(x => x.Health / x.Cost)
+                .FirstOrDefault();
+
+            if (wtb != null)
+            {
+                result.Add(new MoveIdea(
+                    Actions.Buy(wtb.Name),
+                    $"Health Dangerously Low ({me.Health}) - Heal!",
+                    new IdeaResult(myHeroDeaths: 1, myHealth: me.Health + wtb.Health)));
+            }
+        }
+
+        // Check for Enemies in Range
 
         var closestEnemy = state.Common.Enemies.FirstOrDefault(x => x.Distance(me) < me.AttackRange);
         if (closestEnemy != null)
@@ -1298,34 +1322,44 @@ public class IronmanRanged : HeroBot
                     score));
         }
 
+        // Keep to the Bush Line
         var theFront = state.Common.MyFrontLine;
         var bush = state.Bushes
+            .Where(x => state.Common.BehindFrontLine(x.X))
             .OrderBy(x => x.Distance(new Coordinate(theFront, state.Common.MyTower.Y)))
             .FirstOrDefault();
 
         if (bush != Coordinate.Empty)
         {
-            result.Add(new MoveIdea(Actions.Move(bush), "Hide in Bush Nearest to Front Line",
-                new IdeaResult()));
+            result.Add(
+                new MoveIdea(Actions.Move(bush),
+                    "Hide in Bush Nearest to Front Line",
+                    new IdeaResult()));
         }
 
-        var scored = result.Select(x => new
+        // ==== Shop for Items to POWER UP! ====
+        var interesting = state.Items
+            .Where(x => !x.Name.Contains("Bronze"))
+            .Affordable(state.PlayerGold)
+            .Where(x => x.BoostsDamage)
+            .OrderBy(x => x.Damage / x.Cost)
+            .FirstOrDefault();
+
+        if (interesting != null)
         {
-            Idea = x,
-            Score = (
-                1000 * x.Result.MyHeroDeaths +
-                 100 * x.Result.MyHealth +
-                  10 * x.Result.EnemyHealth +
-                   1 * x.Result.MyGoldEarned
-            )
-        });
+            result.Add(
+                new MoveIdea(Actions.Buy(interesting),
+                    $"{interesting.Name} Boosts Damage to {interesting.Damage}",
+                    new IdeaResult(myDamage: interesting.Damage)));
+        }
 
-        var sorted = scored.OrderByDescending(x => x.Score);
-
-        D.WL($"{me.Attribs.HeroType} Score Ideas:");
-        sorted.ToList().ForEach(x => D.WL($"  - {x.Score}pts - {x.Idea.Command}: {x.Idea.Reason}"));
-
-        return sorted.Select(x => x.Idea).ToList();
+        return result
+            .OrderByDescending(x => x.Result.MyHeroDeaths)
+            .ThenByDescending(x => x.Result.MyHealth)
+            .ThenByDescending(x => x.Result.MyDamage)
+            .ThenBy(x => x.Result.EnemyHealth)
+            .ThenByDescending(x => x.Result.MyGoldEarned)
+            .ToList();
     }
 }
 
@@ -1476,6 +1510,13 @@ public class CommonEntities
         return (_state.MyTeam == 0)
             ? x > MyRear
             : x < MyRear;
+    }
+
+    public bool BehindFrontLine(int x)
+    {
+        return (_state.MyTeam == 0)
+            ? x < MyFrontLine
+            : x > MyFrontLine;
     }
 }
 
