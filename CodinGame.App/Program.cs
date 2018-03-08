@@ -70,6 +70,8 @@ public class IdeaResult
 
     public static IdeaResult HeroDeath(Hero hero) => new IdeaResult(myHeroDeaths: 1, myHealth: hero.Health);
     public static IdeaResult GrootKill => new IdeaResult(myGoldEarned: 150);
+    public static IdeaResult EnemyKill(Entity entity, int threat = 0) => new IdeaResult(myHealth: -threat, enemyHealth: -entity.Health, enemyUnitDeaths: 1, myGoldEarned: entity.GoldValue);
+    public static IdeaResult Attack(Hero hero, Entity entity, int threat = 0) => new IdeaResult(enemyHealth: -hero.AttackDamage, myHealth: -threat);
 
     public override string ToString() => $"MyHeroDeaths:{MyHeroDeaths} MyHealth:{MyHealth} MyDamage:{MyDamage} EnemyHeroDeaths:{EnemyHeroDeaths} EnemyUnitDeaths:{EnemyUnitDeaths}  EnemyHealth:{EnemyHealth} MyGoldEarned:{MyGoldEarned}";
 }
@@ -556,11 +558,21 @@ public class FireballSkill : CoordinateTargetedSkillMove
 
     protected override bool ShouldUse(Hero hero, GameState state)
     {
+        // TODO: Make Damage Calculation and Targeting Smarter
+        /*  • range: 900
+            • flytime: 0.9
+            • impact radius: 50
+            Damage: current mana * 0.2 + 55 * distance traveled / 1000
+        */
+
         state.Common.EnemyHeroes.ForEach(x => D.WL($"{x.Attribs.HeroType} @ {x.Distance(hero)} > {x.MovementSpeed}"));
 
+        var heroes = state.Common.EnemyHeroes.Select(y => $"{y.Attribs.HeroType} @ {y.Distance(hero)}");
+        D.WL($"FIREBALL: Hero Ranges: {string.Join(", ", heroes)}");
+
         var heroInRange = state.Common.EnemyHeroes
-            .Where(x => x.Distance(hero) - x.MovementSpeed >= 700) // Only Fire at Range for DMG
-            .Where(x => x.Distance(hero) - x.MovementSpeed <= 900)
+            .Where(x => x.Distance(hero) >= 300) // Only Fire at Range for DMG
+            .Where(x => x.Distance(hero) <= 1000)
             .FirstOrDefault();
 
         if (heroInRange == null) return false;
@@ -1276,7 +1288,8 @@ public class IronmanCarry : HeroBot
 
     public IronmanCarry() : base("IRONMAN", 270)
     {
-
+        Skills.Add(new FireballSkill());
+        Skills.Add(new BurningSkill());
     }
 
     protected override List<MoveIdea> GetIdeas(Hero me, GameState state, ScoreCriteria currentScore)
@@ -1319,18 +1332,26 @@ public class IronmanCarry : HeroBot
         }
 
         // Check for Enemies in Range
+        var enemiesInRange = state.Common.Enemies.Where(x => x.Distance(me) <= me.AttackRange).ToList();
+        var inEnemiesRange = state.Common.Enemies.Where(x => x.Distance(me) <= x.AttackRange).ToList();
+        var threat = inEnemiesRange.Sum(x => x.AttackDamage);
 
-        var closestEnemy = state.Common.Enemies.FirstOrDefault(x => x.Distance(me) < me.AttackRange);
-        if (closestEnemy != null)
+        if (enemiesInRange.Any())
         {
-            var willKill = closestEnemy.Health <= me.AttackDamage;
-            var score = willKill
-                ? new IdeaResult(enemyUnitDeaths: 1)
-                : new IdeaResult(enemyHealth: -me.AttackDamage);
+            var byHealth = enemiesInRange
+                .OrderBy(x => x.Health)
+                .Select(x => new { Entity = x, WillKill = x.Health <= me.AttackDamage })
+                .ToList();
+
+            var target = byHealth.FirstOrDefault(x => x.WillKill) ?? byHealth.FirstOrDefault();
+
+            var score = target.WillKill
+                ? IdeaResult.EnemyKill(target.Entity, threat)
+                : IdeaResult.Attack(me, target.Entity, threat);
 
             result.Add(
-                new MoveIdea(Actions.Attack(closestEnemy),
-                    $"Attack Enemy In Range {closestEnemy.UnitId} {closestEnemy.UnitType}",
+                new MoveIdea(Actions.Attack(target.Entity),
+                    $"Attack Enemy In Range {target.Entity.UnitId} {target.Entity.UnitType} (Kill? {target.WillKill})",
                     score));
         }
 
@@ -1370,6 +1391,20 @@ public class IronmanCarry : HeroBot
             }
         }
 
+        // TODO: Hack - Need to make cooldown tracker nicer for "Idea" model.
+        foreach (var skill in Skills)
+        {
+            var action = skill.Move(me, state);
+
+            if (!string.IsNullOrWhiteSpace(action))
+            {
+                result.Add(
+                    new MoveIdea(action,
+                        "Skill (Unable to Predict Result - HACK: Always Fire!)",
+                        new IdeaResult(Int32.MaxValue)));
+            }
+        }
+
         return result
             .OrderByDescending(x => x.Result.MyHeroDeaths)
             .ThenByDescending(x => x.Result.MyHealth)
@@ -1388,10 +1423,13 @@ public abstract class HeroBot
     public int Range { get; private set; }
     public int Carrying { get; protected set; }
 
+    protected List<SkillMove> Skills { get; private set; }
+
     public HeroBot(string name, int range)
     {
         Name = name;
         Range = range;
+        Skills = new List<SkillMove>();
     }
 
     public List<MoveIdea> GetIdeas(GameState state, ScoreCriteria currentScore)
