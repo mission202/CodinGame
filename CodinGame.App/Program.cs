@@ -839,6 +839,7 @@ public class HulkJungler : HeroBot
         else
         {
             var nearest = state.Common.Groots
+                .Where(x => x.Distance(state.Common.EnemyTower) > 400) /* Tower Attack Range */
                 .OrderBy(x => x.Distance(me))
                 .FirstOrDefault();
 
