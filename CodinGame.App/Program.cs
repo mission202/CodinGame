@@ -828,7 +828,7 @@ public class HulkJungler : HeroBot
 
             var bushNearSpawn = state.Bushes
                 .Where(x => x.Y < state.Common.MyTower.Y)
-                .OrderBy(x => spawn.Distance(spawn))
+                .OrderBy(x => spawn.Distance(x))
                 .FirstOrDefault();
 
             result.Add(new MoveIdea(
