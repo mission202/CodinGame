@@ -327,12 +327,14 @@ public class MoveIdea
     public string Reason { get; private set; }
     public string Command { get; set; }
     public IdeaResult Result { get; private set; }
+    public Action OnExecuted { get; private set; }
 
-    public MoveIdea(string command, string reason, IdeaResult expResult)
+    public MoveIdea(string command, string reason, IdeaResult expResult, Action onExecuted = null)
     {
         Command = command;
         Reason = reason;
         Result = expResult;
+        OnExecuted = onExecuted ?? new Action(() => { });
     }
 }
 
@@ -400,7 +402,9 @@ public class AI
                     D.WL($"  - {idea.Command} : {idea.Reason} ({idea.Result})");
                 }
 
-                response.Add(ideas.First().Command);
+                var executing = ideas.First();
+                response.Add(executing.Command);
+                executing.OnExecuted();
                 continue;
             }
             else
@@ -427,11 +431,15 @@ public class AI
 
 public class Game
 {
+    private readonly bool _outputUnits;
+
     private readonly GameState _gs;
     private readonly AI _brain;
 
-    public Game(GameState gs = null, bool outputShop = false)
+    public Game(GameState gs = null, bool outputShop = false, bool outputUnits = false)
     {
+        _outputUnits = outputUnits;
+
         _gs = gs ?? new GameState();
         _gs.Init();
 
@@ -457,8 +465,11 @@ public class Game
         if (_gs.IsHeroPickRound)
             return new[] { _gs.NextHero() };
 
-        D.WL($"{_gs.Entities.Count()} Units:");
-        _gs.Entities.ForEach(x => D.WL($" - {x.ToString()}"));
+        if (_outputUnits)
+        {
+            D.WL($"{_gs.Entities.Count()} Units:");
+            _gs.Entities.ForEach(x => D.WL($" - {x.ToString()}"));
+        }
 
         return _brain.GetMoves(_gs);
     }
@@ -1276,18 +1287,19 @@ public class IronmanCarry : HeroBot
         // TODO: Finish This Up! Detect Threat vs. Health?
         if (me.Health <= 100)
         {
-            var bushAtTower = state.Bushes
-                .OrderBy(x => state.Common.MyTower.Distance(x))
-                .First();
-
-            var runCmd = me.X == bushAtTower.X && me.Y == bushAtTower.Y
+            bool alreadyThere = me.X == state.Common.MyTower.X && me.Y == state.Common.MyTower.Y;
+            var runCmd = alreadyThere
                 ? Actions.Wait
-                : Actions.Move(bushAtTower);
+                : Actions.Move(state.Common.MyTower);
+
+            var runResult = alreadyThere
+                ? new IdeaResult()
+                : IdeaResult.HeroDeath(me);
 
             result.Add(new MoveIdea(
                     runCmd,
                     $"Health Dangerously Low ({me.HealthPercent}%) - Hide!",
-                    IdeaResult.HeroDeath(me)));
+                    runResult));
 
             // Can We Buy A Potion?
             var wtb = state.Items
@@ -1338,25 +1350,32 @@ public class IronmanCarry : HeroBot
         }
 
         // ==== Shop for Items to POWER UP! ====
-        var interesting = state.Items
-            .Where(x => !x.Name.Contains("Bronze"))
-            .Affordable(state.PlayerGold)
-            .Where(x => x.BoostsDamage)
-            .OrderBy(x => x.Damage / x.Cost)
-            .FirstOrDefault();
 
-        if (interesting != null)
+        if (Carrying < Consts.MAX_ITEMS)
         {
-            result.Add(
-                new MoveIdea(Actions.Buy(interesting),
-                    $"{interesting.Name} Boosts Damage to {interesting.Damage}",
-                    new IdeaResult(myDamage: interesting.Damage)));
+            var interesting = state.Items
+                .Where(x => !x.Name.Contains("Bronze"))
+                .Affordable(state.PlayerGold)
+                .Where(x => x.BoostsDamage)
+                .OrderBy(x => x.Damage / x.Cost)
+                .FirstOrDefault();
+
+            if (interesting != null)
+            {
+                result.Add(
+                    new MoveIdea(Actions.Buy(interesting),
+                        $"{interesting.Name} Boosts Damage to {interesting.Damage}",
+                        new IdeaResult(myDamage: interesting.Damage),
+                        () => Carrying++));
+            }
         }
 
         return result
             .OrderByDescending(x => x.Result.MyHeroDeaths)
             .ThenByDescending(x => x.Result.MyHealth)
             .ThenByDescending(x => x.Result.MyDamage)
+            .ThenByDescending(x => x.Result.EnemyHeroDeaths)
+            .ThenByDescending(x => x.Result.EnemyUnitDeaths)
             .ThenBy(x => x.Result.EnemyHealth)
             .ThenByDescending(x => x.Result.MyGoldEarned)
             .ToList();
@@ -1367,6 +1386,7 @@ public abstract class HeroBot
 {
     public string Name { get; private set; }
     public int Range { get; private set; }
+    public int Carrying { get; protected set; }
 
     public HeroBot(string name, int range)
     {
