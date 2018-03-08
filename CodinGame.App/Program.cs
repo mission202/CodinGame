@@ -386,12 +386,13 @@ public class AI
 
             var ideas = hero.GetIdeas(state, score);
 
+            // TODO: Pass Ideas to Role, With Scores. AI+Role Designation determines move(s) picked.
             if (ideas.Any())
             {
                 D.WL($"Ideas from {hero.Name}:");
                 foreach (var idea in ideas)
                 {
-                    D.WL($"- {idea.Command} : {idea.Reason}");
+                    D.WL($"  - {idea.Command} : {idea.Reason}");
                 }
 
                 response.Add(ideas.First().Command);
@@ -1254,7 +1255,7 @@ public class HulkJungler : HeroBot
 
         var sorted = scored.OrderByDescending(x => x.Score);
 
-        D.WL($"Score Ideas:");
+        D.WL($"{me.Attribs.HeroType} Score Ideas:");
         sorted.ToList().ForEach(x => D.WL($"  - {x.Score}pts - {x.Idea.Command}: {x.Idea.Reason}"));
 
         return sorted.Select(x => x.Idea).ToList();
@@ -1278,7 +1279,53 @@ public class IronmanRanged : HeroBot
 
     protected override List<MoveIdea> GetIdeas(Hero me, GameState state, ScoreCriteria currentScore)
     {
-        return new List<MoveIdea>();
+        // Find Bush Closest to Front, Hide in it. Kill enemies in range/spells
+        var result = new List<MoveIdea>();
+
+        // Check for Enemnies in Range
+
+        var closestEnemy = state.Common.Enemies.FirstOrDefault(x => x.Distance(me) < me.AttackRange);
+        if (closestEnemy != null)
+        {
+            var willKill = closestEnemy.Health <= me.AttackDamage;
+            var score = willKill
+                ? new IdeaResult(enemyUnitDeaths: 1)
+                : new IdeaResult(enemyHealth: -me.AttackDamage);
+
+            result.Add(
+                new MoveIdea(Actions.Attack(closestEnemy),
+                    $"Attack Enemy In Range {closestEnemy.UnitId} {closestEnemy.UnitType}",
+                    score));
+        }
+
+        var theFront = state.Common.MyFrontLine;
+        var bush = state.Bushes
+            .OrderBy(x => x.Distance(new Coordinate(theFront, state.Common.MyTower.Y)))
+            .FirstOrDefault();
+
+        if (bush != Coordinate.Empty)
+        {
+            result.Add(new MoveIdea(Actions.Move(bush), "Hide in Bush Nearest to Front Line",
+                new IdeaResult()));
+        }
+
+        var scored = result.Select(x => new
+        {
+            Idea = x,
+            Score = (
+                1000 * x.Result.MyHeroDeaths +
+                 100 * x.Result.MyHealth +
+                  10 * x.Result.EnemyHealth +
+                   1 * x.Result.MyGoldEarned
+            )
+        });
+
+        var sorted = scored.OrderByDescending(x => x.Score);
+
+        D.WL($"{me.Attribs.HeroType} Score Ideas:");
+        sorted.ToList().ForEach(x => D.WL($"  - {x.Score}pts - {x.Idea.Command}: {x.Idea.Reason}"));
+
+        return sorted.Select(x => x.Idea).ToList();
     }
 }
 
@@ -1323,6 +1370,11 @@ public struct Coordinate
         X = x;
         Y = y;
     }
+
+    public static Coordinate Empty => new Coordinate(0, 0);
+
+    public static bool operator ==(Coordinate a, Coordinate b) => a.X == b.X && a.Y == b.Y;
+    public static bool operator !=(Coordinate a, Coordinate b) => a.X != b.X || a.Y != b.Y;
 }
 
 public class CommonEntities
