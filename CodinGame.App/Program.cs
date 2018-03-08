@@ -65,7 +65,7 @@ public class IdeaResult
         MyGoldEarned = myGoldEarned;
     }
 
-    public static IdeaResult HeroDeath(Hero hero) => new IdeaResult(myHeroDeaths: 1, myHealth: -hero.Health);
+    public static IdeaResult HeroDeath(Hero hero) => new IdeaResult(myHeroDeaths: 1, myHealth: hero.Health);
     public static IdeaResult GrootKill => new IdeaResult(myGoldEarned: 150);
 }
 
@@ -1129,6 +1129,7 @@ public class HulkJungler : HeroBot
         // TODO: Separate Ideas from Rating/Ordering (Role)
         // Ideas = "What I Could Do", Priority = "Given My Role"
 
+        // TODO: Update to Only Run When I Cant Kill a Groot (w/ 250 Helth @ 50 Damage)
         if (me.HealthPercent <= 25)
         {
             var bushAtTower = state.Bushes
@@ -1157,7 +1158,7 @@ public class HulkJungler : HeroBot
                 result.Add(new MoveIdea(
                     Actions.Buy(wtb.Name),
                     $"Health Dangerously Low ({me.HealthPercent}%) - Heal!",
-                    new IdeaResult(myHeroDeaths: 1, myHealth: wtb.Health)));
+                    new IdeaResult(myHeroDeaths: 1, myHealth: me.Health + wtb.Health)));
             }
         }
 
@@ -1198,9 +1199,14 @@ public class HulkJungler : HeroBot
                 .OrderBy(x => state.Common.MyTower.Distance(x))
                 .First();
 
+            var bushNearSpawn = state.Bushes
+                .Where(x => x.Y < state.Common.MyTower.Y)
+                .OrderBy(x => spawn.Distance(spawn))
+                .FirstOrDefault();
+
             result.Add(new MoveIdea(
-                Actions.Move(spawn),
-                "No Groots, Spawn Camp Near Tower",
+                Actions.Move(bushNearSpawn),
+                "No Groots, Spawn Camp Nearest to Tower",
                 IdeaResult.GrootKill));
         }
         else
@@ -1249,7 +1255,7 @@ public class HulkJungler : HeroBot
         var sorted = scored.OrderByDescending(x => x.Score);
 
         D.WL($"Score Ideas:");
-        sorted.ToList().ForEach(x => D.WL($"{x.Score}pts - {x.Idea.Command}: {x.Idea.Reason}"));
+        sorted.ToList().ForEach(x => D.WL($"  - {x.Score}pts - {x.Idea.Command}: {x.Idea.Reason}"));
 
         return sorted.Select(x => x.Idea).ToList();
         //return result
@@ -1436,6 +1442,11 @@ public static class Extensions
     }
 
     public static int Distance(this Entity a, Coordinate b)
+    {
+        return (int)Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(b.Y - a.Y, 2));
+    }
+
+    public static int Distance(this Coordinate a, Coordinate b)
     {
         return (int)Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(b.Y - a.Y, 2));
     }
