@@ -23,7 +23,7 @@ namespace CodinGame.Tests
                 1 0 TOWER 100 540 400 1500 1500 0 100 0 0 0 0 0 0 0 0 0 - 1 0
                 2 1 TOWER 1820 540 400 1500 1500 0 100 0 0 0 0 0 0 0 0 0 - 1 0"
             .ToGame().Moves();
-            Assert.Contains(Heroes.Hulk.Name, actions.IgnoreMessage());
+            Assert.Contains("HULK", actions.IgnoreMessage());
         }
 
         // TODO: Tests More Generic vs. Specific Co-Ords etc?
