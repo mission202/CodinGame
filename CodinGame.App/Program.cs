@@ -68,7 +68,8 @@ public class IdeaResult
         MyGoldEarned = myGoldEarned;
     }
 
-    public static IdeaResult HeroDeath(Hero hero) => new IdeaResult(myHeroDeaths: 1, myHealth: hero.Health);
+    public static IdeaResult NoChange => new IdeaResult();
+    public static IdeaResult HeroDeath(Hero hero) => new IdeaResult(myHeroDeaths: 1, myHealth: -hero.Health);
     public static IdeaResult GrootKill => new IdeaResult(myGoldEarned: 150);
     public static IdeaResult EnemyKill(Entity entity, int threat = 0) => new IdeaResult(myHealth: -threat, enemyHealth: -entity.Health, enemyUnitDeaths: 1, myGoldEarned: entity.GoldValue);
     public static IdeaResult Attack(Hero hero, Entity entity, int threat = 0) => new IdeaResult(enemyHealth: -hero.AttackDamage, myHealth: -threat);
@@ -420,8 +421,6 @@ public class FireballSkill : CoordinateTargetedSkillMove
             Damage: current mana * 0.2 + 55 * distance traveled / 1000
         */
 
-        state.Common.EnemyHeroes.ForEach(x => D.WL($"{x.Attribs.HeroType} @ {x.Distance(hero)} > {x.MovementSpeed}"));
-
         var heroes = state.Common.EnemyHeroes.Select(y => $"{y.Attribs.HeroType} @ {y.Distance(hero)}");
         D.WL($"FIREBALL: Hero Ranges: {string.Join(", ", heroes)}");
 
@@ -617,7 +616,6 @@ public abstract class SkillMove : StrategicMove
         {
             if (hero.Attribs.Mana >= ManaCost)
             {
-                D.WL($"Activating {SkillName}");
                 CooldownRemaining = Cooldown;
                 return Command;
             }
@@ -625,7 +623,6 @@ public abstract class SkillMove : StrategicMove
             D.WL($"Unable to Activate {SkillName} - Mana {hero.Attribs.Mana}/{hero.Attribs.MaxMana}");
         }
 
-        D.WL($"Don't Need to Activate {SkillName}");
         return string.Empty;
     }
 }
@@ -898,16 +895,6 @@ public class IronmanCarry : HeroBot
         var inEnemiesRange = state.Common.Enemies.Where(x => x.Distance(me) <= x.AttackRange).ToList();
         var threat = inEnemiesRange.Sum(x => x.AttackDamage);
 
-        if (state.Common.ForwardOfRear(me.X))
-        {
-            var targetX = state.Common.ShiftX(state.Common.MyRear, -50);
-            // Self-Preservation FTW
-            result.Add(new MoveIdea(
-                    Actions.Move(targetX, state.Common.MyTower.Y),
-                    $"Returning to Front Line",
-                    new IdeaResult(myHeroDeaths: 1, myHealth: -me.Health)));
-        }
-
         if (me.Health <= threat + 50)
         {
             var bushAtTower = state.Bushes
@@ -925,7 +912,7 @@ public class IronmanCarry : HeroBot
 
             result.Add(new MoveIdea(
                     runCmd,
-                    $"Health Dangerously Low ({me.HealthPercent}%) - Hide!",
+                    $"Risk of Death (Threat @ {threat}) - Hide!",
                     runResult));
 
             // Can We Buy A Potion?
@@ -948,7 +935,8 @@ public class IronmanCarry : HeroBot
         if (enemiesInRange.Any())
         {
             var byHealth = enemiesInRange
-                .OrderBy(x => x.Health)
+                .OrderByDescending(x => x.UnitType) /* UNITs Before Heroes to Avoid Aggro */
+                .ThenBy(x => x.Health)
                 .Select(x => new { Entity = x, WillKill = x.Health <= me.AttackDamage })
                 .ToList();
 
@@ -962,6 +950,25 @@ public class IronmanCarry : HeroBot
                 new MoveIdea(Actions.Attack(target.Entity),
                     $"Attack Enemy In Range {target.Entity.UnitId} {target.Entity.UnitType} (Kill? {target.WillKill})",
                     score));
+        }
+        else
+        {
+            // Move to Front Line
+            var frontLine = state.Common.MyFrontLine;
+            var shifted = state.Common.ShiftX(frontLine, -50);
+            result.Add(
+                new MoveIdea(Actions.Move(shifted, state.Common.MyTower.Y),
+                    $"Move to Front Line {shifted},{state.Common.MyTower.Y}",
+                    IdeaResult.NoChange));
+        }
+
+        if (state.Common.ForwardOfFrontLine(me.X))
+        {
+            // Spearflipped or Pulled into Enemy Lines - Get Out (Head Away from Lane)
+            result.Add(
+                new MoveIdea(Actions.Move(state.Common.ShiftX(me.X, -50), 250),
+                    $"Pulled Into Enemy Lines - Escape!",
+                    IdeaResult.HeroDeath(me)));
         }
 
         // ==== Shop for Items to POWER UP! ====
