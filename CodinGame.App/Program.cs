@@ -835,27 +835,12 @@ public class HulkJungler : HeroBot
             .OrderBy(x => x.Distance(me))
             .ToList();
 
-        if (!grootTargets.Any())
+        if (grootTargets.Any())
         {
-            // Let's Smash Some Enemy Units for LOLs
-            var nearestEnemy = state.Common.EnemyUnits
-                .Where(x => x.Distance(state.Common.EnemyTower) <= 400)
-                .OrderBy(x => x.Distance(me))
-                .ThenBy(x => x.Health)
-                .FirstOrDefault();
-
-            if (nearestEnemy != null)
-            {
-                result.Add(new MoveIdea(
-                    Actions.Attack(nearestEnemy),
-                        $"No Groots, Lets Just Smash {nearestEnemy.UnitType} #{nearestEnemy.UnitId}",
-                        IdeaResult.HitEnemy(me, nearestEnemy)));
-            }
-        }
-        else
-        {
+            var safety = me.MaxHealth / 100 * 25;
+            var healthRequired = ((400 / me.AttackDamage) * 35) + safety;
             var nearest = grootTargets.FirstOrDefault();
-            if (nearest != null)
+            if (nearest != null && me.Health > healthRequired)
             {
                 int nearestD = nearest.Distance(me);
                 if (nearestD <= (me.AttackRange - Consts.SAFETY_DIST))
@@ -882,6 +867,21 @@ public class HulkJungler : HeroBot
                     }
                 }
             }
+        }
+
+        // Let's Also Smash Some Enemy Units for LOLs
+        var nearestEnemy = state.Common.EnemyUnits
+            .Where(x => x.Distance(state.Common.EnemyTower) >= 400)
+            .OrderBy(x => x.Distance(me))
+            .ThenBy(x => x.Health)
+            .FirstOrDefault();
+
+        if (nearestEnemy != null)
+        {
+            result.Add(new MoveIdea(
+                Actions.Attack(nearestEnemy),
+                    $"No Groots, Lets Just Smash {nearestEnemy.UnitType} #{nearestEnemy.UnitId}",
+                    IdeaResult.HitEnemy(me, nearestEnemy)));
         }
 
         return result
