@@ -1032,7 +1032,8 @@ public class IronmanCarry : HeroBot
 
             if (unitInRange != null)
             {
-                var fireballAction = fireball.Move(me, state, new Coordinate(unitInRange.X, unitInRange.Y));
+                var fireballAction = fireball.Move(me, state, new Coordinate(unitInRange.X, unitInRange.Y))
+                    .WithMessage("HADOUKEN!");
                 var damage = (int)(me.Attribs.Mana * 0.2 + 55 * me.Distance(unitInRange) / 1000);
                 var willKill = damage >= unitInRange.Health;
                 result.Add(
