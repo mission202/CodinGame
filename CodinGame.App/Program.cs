@@ -74,6 +74,14 @@ public class IdeaResult
     public static IdeaResult EnemyKill(Entity entity, int threat = 0) => new IdeaResult(myHealth: -threat, enemyHealth: -entity.Health, enemyUnitDeaths: 1, myGoldEarned: entity.GoldValue);
     public static IdeaResult Attack(Hero hero, Entity entity, int threat = 0) => new IdeaResult(enemyHealth: -hero.AttackDamage, myHealth: -threat);
 
+    public static IdeaResult HitEnemy(Hero hero, Entity entity)
+    {
+        var score = HitEnemy(entity, hero.AttackDamage);
+        var willKill = entity.Health <= hero.AttackDamage;
+        if (willKill) score.MyGoldEarned += entity.GoldValue;
+        return score;
+    }
+
     public static IdeaResult HitEnemy(Entity entity, int damage)
     {
         var willKill = entity.Health <= damage;
@@ -816,30 +824,32 @@ public class HulkJungler : HeroBot
             }
         }
 
-        // No Groots Yet? Nearest Spawn to Tower
-        if (!state.Common.Groots.Any())
-        {
-            var spawn = state.Spawns
-                .OrderBy(x => state.Common.MyTower.Distance(x))
-                .First();
+        var grootTargets = state.Common.Groots
+            .Where(x => state.Common.BehindFrontLine(x.X))
+            .Where(x => x.Distance(state.Common.EnemyTower) > 400) /* Tower Attack Range */
+            .OrderBy(x => x.Distance(me))
+            .ToList();
 
-            var bushNearSpawn = state.Bushes
-                .Where(x => x.Y < state.Common.MyTower.Y)
-                .OrderBy(x => spawn.Distance(x))
+        if (!grootTargets.Any())
+        {
+            // Let's Smash Some Enemy Units for LOLs
+            var nearestEnemy = state.Common.EnemyUnits
+                .Where(x => x.Distance(state.Common.EnemyTower) <= 400)
+                .OrderBy(x => x.Distance(me))
+                .ThenBy(x => x.Health)
                 .FirstOrDefault();
 
-            result.Add(new MoveIdea(
-                Actions.Move(bushNearSpawn),
-                "No Groots, Spawn Camp Nearest to Tower",
-                IdeaResult.GrootKill));
+            if (nearestEnemy != null)
+            {
+                result.Add(new MoveIdea(
+                    Actions.Attack(nearestEnemy),
+                        $"No Groots, Lets Just Smash {nearestEnemy.UnitType} #{nearestEnemy.UnitId}",
+                        IdeaResult.HitEnemy(me, nearestEnemy)));
+            }
         }
         else
         {
-            var nearest = state.Common.Groots
-                .Where(x => x.Distance(state.Common.EnemyTower) > 400) /* Tower Attack Range */
-                .OrderBy(x => x.Distance(me))
-                .FirstOrDefault();
-
+            var nearest = grootTargets.FirstOrDefault();
             if (nearest != null)
             {
                 int nearestD = nearest.Distance(me);
