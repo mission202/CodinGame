@@ -598,15 +598,9 @@ public abstract class SkillMove : StrategicMove
 
     public override string Move(Hero hero, GameState state)
     {
-        if (!CanUse(hero, state)) return string.Empty;
-
-        if (hero.Attribs.Mana >= ManaCost)
-        {
-            _availableOnTurn = state.TurnNumber + Cooldown;
-            return Command;
-        }
-
-        return string.Empty;
+        return CanUse(hero, state)
+            ? Command
+            : string.Empty;
     }
 
     public bool CanUse(Hero hero, GameState state)
@@ -616,6 +610,11 @@ public abstract class SkillMove : StrategicMove
             D.WL($"{hero.Attribs.HeroType} Can't Use {SkillName}");
             return false;
         }
+
+        D.WL($"Checking Cooldown of {SkillName}:");
+        D.WL($" - _availableOnTurn: {_availableOnTurn}");
+        D.WL($" - state.TurnNumber: {state.TurnNumber}");
+        D.WL($" - Math.Max(0, _availableOnTurn - state.TurnNumber): {Math.Max(0, _availableOnTurn - state.TurnNumber)}");
 
         var cooldownRemaining = Math.Max(0, _availableOnTurn - state.TurnNumber);
 
@@ -633,6 +632,11 @@ public abstract class SkillMove : StrategicMove
 
         return true;
     }
+
+    public void Used(GameState state)
+    {
+        _availableOnTurn = state.TurnNumber + Cooldown;
+    }
 }
 
 public class Entity
@@ -643,6 +647,7 @@ public class Entity
     public string UnitType { get; private set; }
     public int X { get; private set; }
     public int Y { get; private set; }
+    public Coordinate Coordinate => new Coordinate(X, Y);
     public int AttackRange { get; private set; }
     public bool IsRanged => AttackRange >= 150;
     public int Health { get; private set; }
@@ -984,13 +989,15 @@ public class IronmanCarry : HeroBot
             var blink = Skills.OfType<BlinkSkill>().Single();
             var canBlink = blink.CanUse(me, state);
             var escapeAction = (canBlink)
-                ? blink.Move(me, state, new Coordinate(state.Common.ShiftX(me.X, -100), me.Y - 200))
+                ? blink.Move(me, state, new Coordinate(state.Common.ShiftX(me.X, -200), Math.Max(300, me.Y - 200)))
                 : Actions.Move(state.Common.ShiftX(me.X, -100), 250);
+            Action onExecuted = canBlink ? new Action(() => { }) : new Action(() => blink.Used(state));
 
             result.Add(
                 new MoveIdea(escapeAction,
                     $"Pulled Into Enemy Lines - Escape!",
-                    IdeaResult.HeroDeath(me)));
+                    IdeaResult.HeroDeath(me),
+                    onExecuted));
         }
 
         // ==== Shop for Items to POWER UP! ====
@@ -1032,14 +1039,15 @@ public class IronmanCarry : HeroBot
 
             if (unitInRange != null)
             {
-                var fireballAction = fireball.Move(me, state, new Coordinate(unitInRange.X, unitInRange.Y))
+                var fireballAction = fireball.Move(me, state, unitInRange.Coordinate)
                     .WithMessage("HADOUKEN!");
                 var damage = (int)(me.Attribs.Mana * 0.2 + 55 * me.Distance(unitInRange) / 1000);
                 var willKill = damage >= unitInRange.Health;
                 result.Add(
                     new MoveIdea(fireballAction,
                         $"Throw Fireball @ {unitInRange.UnitType} #{unitInRange.UnitId} for {damage} Damage",
-                         IdeaResult.HitEnemy(unitInRange, damage)));
+                         IdeaResult.HitEnemy(unitInRange, damage),
+                         () => fireball.Used(state)));
             }
         }
 
