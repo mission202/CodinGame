@@ -391,6 +391,14 @@ public class AI
                 }
 
                 var executing = ideas.First();
+
+                // Basic De-Dupe (Esp. for Denies)
+                if (response.Contains(executing.Command) && ideas.Count > 1)
+                {
+                    D.WL($"Skipping {executing.Command} as Duplicate");
+                    executing = ideas.Skip(1).First();
+                }
+
                 response.Add(executing.Command);
                 executing.OnExecuted();
                 continue;
@@ -1432,7 +1440,7 @@ public class DrStrangeSupport : HeroBot
         Skills.Add(new ShieldSkill());
         Skills.Add(new PullSkill());
 
-        Moves.Add(new StayBehindFrontLine(lineStrength: 2));
+        Moves.Add(new StayBehindFrontLine(lineStrength: 3, distanceFromFront: 75));
         Moves.Add(new AttackEnemiesInRange());
         Moves.Add(new DenyKills());
         Moves.Add(new EscapePullOrSpearflip());
