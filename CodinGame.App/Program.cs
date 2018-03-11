@@ -584,11 +584,15 @@ public class StayBehindFrontLine : MoveIdeaMaker
 
         if (unitCount <= _lineStrength)
         {
-            // Line Folded, RTB
-            result.Add(
-                new MoveIdea(Actions.Move(p.State.Common.MyTower),
-                    $"Line Folded (<= {_lineStrength}) - RTB",
-                    IdeaResult.HeroDeath(p.Hero)));
+            // Line Folded, RTB (if not there already)
+            if (p.Hero.Coordinate != p.State.Common.MyTower.Coordinate)
+            {
+                result.Add(
+                    new MoveIdea(Actions.Move(p.State.Common.MyTower),
+                        $"Line Folded (<= {_lineStrength}) - RTB",
+                        IdeaResult.HeroDeath(p.Hero)));
+            }
+
             return;
         }
 
@@ -915,6 +919,7 @@ public class ShieldHeroes : MoveIdeaMaker
 
 public class AoEHeal : MoveIdeaMaker
 {
+    private readonly bool _debug = false;
     private readonly int _minGroupSize;
     private readonly int _minHealAmount;
 
@@ -937,7 +942,7 @@ public class AoEHeal : MoveIdeaMaker
 
         if (!inRange.Any()) return;
 
-        D.WL($"Able to AoEHeal at {amount} Points");
+        D.WL($"Able to AoEHeal at {amount} Points", _debug);
 
         var calc = inRange.Select(unitInRange =>
         {
@@ -945,9 +950,9 @@ public class AoEHeal : MoveIdeaMaker
                 .Where(x => x.Distance(unitInRange) <= 100)
                 .ToList();
 
-            D.WL($"{unitInRange.UnitType} {unitInRange.UnitId} for AoHeal:");
-            nearby.ForEach(nearUnit => D.WL($" - {nearUnit.UnitType} #{nearUnit.UnitId} {nearUnit.Health}/{nearUnit.MaxHealth} - Healing: {Math.Min(amount, nearUnit.MaxHealth - nearUnit.Health)}"));
-            D.WL($"Total: {nearby.Count} Units @ {nearby.Sum(x => Math.Min(amount, x.MaxHealth - x.Health))}.");
+            D.WL($"{unitInRange.UnitType} {unitInRange.UnitId} for AoHeal:", _debug);
+            nearby.ForEach(nearUnit => D.WL($" - {nearUnit.UnitType} #{nearUnit.UnitId} {nearUnit.Health}/{nearUnit.MaxHealth} - Healing: {Math.Min(amount, nearUnit.MaxHealth - nearUnit.Health)}", _debug));
+            D.WL($"Total: {nearby.Count} Units @ {nearby.Sum(x => Math.Min(amount, x.MaxHealth - x.Health))}.", _debug);
 
             return new
             {
@@ -1716,6 +1721,11 @@ public static class Extensions
 public static class D
 {
     public static void WL(string message) => Console.Error.WriteLine(message);
+    public static void WL(string message, bool debugging)
+    {
+        if (debugging)
+            WL(message);
+    }
 }
 
 public static class Actions
