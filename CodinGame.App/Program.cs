@@ -577,15 +577,16 @@ public class AttackEnemiesInRange : MoveIdeaMaker
         D.WL($"{p.HeroBot.Name} In Range:", Debug);
         byHealth.ForEach(x => D.WL($" - #{x.Entity.UnitId} {x.Entity.UnitType} {x.Entity.Health}/{x.Entity.MaxHealth} - Kill? {x.WillKill}", Debug));
 
-        var target = byHealth.FirstOrDefault(x => x.WillKill) ?? byHealth.FirstOrDefault();
+        foreach (var enemy in byHealth)
+        {
+            var score = IdeaResult.ForHeroPosition(p.Hero, p.Threat)
+                .AttackEnemy(enemy.Entity, p.Hero);
 
-        var score = IdeaResult.ForHeroPosition(p.Hero, p.Threat)
-            .AttackEnemy(target.Entity, p.Hero);
-
-        result.Add(
-            new MoveIdea(Actions.Attack(target.Entity),
-                $"Attack {target.Entity.UnitType} In Range {target.Entity.UnitId}",
-                score));
+            result.Add(
+                new MoveIdea(Actions.Attack(enemy.Entity),
+                    $"Attack {enemy.Entity.UnitType} In Range {enemy.Entity.UnitId}",
+                    score));
+        }
     }
 }
 
@@ -789,10 +790,10 @@ public class GoShopping : MoveIdeaMaker
             .Where(x => !x.IsInstant)
             .Affordable(p.State.PlayerGold);
 
-        if (!affordable.Any()) return;
-
         for (int i = 0; i < _priorities.Length; i++)
             affordable = OrderByPriority(affordable, _priorities[i]);
+
+        if (!affordable.Any()) return;
 
         D.WL("Prioritised Items for Shopping:", Debug);
         affordable.ToList().ForEach(x => D.WL($" - {x.ToString()}", Debug));
@@ -1382,7 +1383,7 @@ public class IronmanCarry : HeroBot
         Moves.Add(new ThrowFireball());
         Moves.Add(new BurnEnemyFrontLine());
         Moves.Add(new EscapePullOrSpearflip());
-        Moves.Add(new GoShopping(maxSlots: Consts.MAX_ITEMS - 1, debug: true));
+        Moves.Add(new GoShopping(maxSlots: Consts.MAX_ITEMS - 1));
     }
 
     protected override List<MoveIdea> GetIdeas(Hero me, GameState state)
