@@ -394,11 +394,14 @@ public class AI
 
                 if (heroesIdeas.Count > 1)
                 {
-                    // Basic De-Dupe (Esp. for Denies)
-                    if (moveIdeas.Any(x => x.Command == executing.Command) && executing.Command.Contains("Denied!"))
-                    {
+                    var shouldSkip = moveIdeas.Any(x =>
+                        x.Command == executing.Command && (
+                        executing.Command.Contains("Denied!")       // Denies
+                        || executing.Result.EnemyUnitDeaths >= 1)    // Expect to Kill in 1 Hit
+                    );
+
+                    if (shouldSkip)
                         executing = heroesIdeas.Skip(1).First();
-                    }
                 }
 
                 moveIdeas.Add(executing);
