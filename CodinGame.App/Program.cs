@@ -639,6 +639,48 @@ public class StayBehindFrontLine : MoveIdeaMaker
     }
 }
 
+public class EscapePullOrSpearflip : MoveIdeaMaker
+{
+    private readonly int _shiftX;
+    private readonly int _shiftY;
+    private readonly int _yMin;
+
+    public EscapePullOrSpearflip(int shiftX = 200, int shiftY = 200, int yMin = 300)
+    {
+        _shiftX = shiftX;
+        _shiftY = shiftY;
+        _yMin = yMin;
+    }
+
+    protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
+    {
+        var enemyFront = p.State.Common.EnemyFrontLine;
+        var pulled = p.State.Common.ForwardOf(p.Hero.X, enemyFront);
+
+        if (!pulled) return;
+
+        // Spearflipped or Pulled into Enemy Lines - Get Out (Head Away from Lane)
+        var coord = new Coordinate(
+            p.State.Common.MyTower.X,
+            //p.State.Common.ShiftX(p.Hero.X, -_shiftX),
+            Math.Max(_yMin, p.Hero.Y - _shiftY));
+
+        // Prefer BLINK if We Have It!
+        var blink = p.HeroBot.Skills.OfType<BlinkSkill>().SingleOrDefault();
+        var canBlink = blink != null && blink.CanUse(p.Hero, p.State);
+        var escapeAction = (canBlink)
+            ? blink.Move(p.Hero, p.State, coord)
+            : Actions.Move(coord);
+        Action onExecuted = canBlink ? new Action(() => blink.Used(p.State)) : new Action(() => { });
+
+        result.Add(
+            new MoveIdea(escapeAction,
+                $"Pulled Into Enemy Lines - Escape!",
+                IdeaResult.HeroDeath(p.Hero),
+                onExecuted));
+    }
+}
+
 public class ThrowFireball : MoveIdeaMaker
 {
     private readonly int _minRange;
@@ -1025,7 +1067,12 @@ public class HulkJungler : HeroBot
                     IdeaResult.HitEnemy(me, nearestEnemy)));
         }
 
-        return result
+        return result;
+    }
+
+    protected override List<MoveIdea> Prioritise(List<MoveIdea> ideas)
+    {
+        return ideas
             .OrderByDescending(x => x.Result.MyHeroDeaths)
             .ThenByDescending(x => x.Result.MyGoldEarned)
             .ThenByDescending(x => x.Result.MyHealth)
@@ -1047,6 +1094,7 @@ public class IronmanCarry : HeroBot
         Moves.Add(new AttackEnemiesInRange());
         Moves.Add(new StayBehindFrontLine(distanceFromFront: 50));
         Moves.Add(new ThrowFireball());
+        Moves.Add(new EscapePullOrSpearflip());
     }
 
     protected override List<MoveIdea> GetIdeas(Hero me, GameState state)
@@ -1096,25 +1144,6 @@ public class IronmanCarry : HeroBot
             }
         }
 
-        if (state.Common.ForwardOfFrontLine(me.X))
-        {
-            // Spearflipped or Pulled into Enemy Lines - Get Out (Head Away from Lane)
-
-            // Prefer BLINK if We Have It!
-            var blink = Skills.OfType<BlinkSkill>().Single();
-            var canBlink = blink.CanUse(me, state);
-            var escapeAction = (canBlink)
-                ? blink.Move(me, state, new Coordinate(state.Common.ShiftX(me.X, -200), Math.Max(300, me.Y - 200)))
-                : Actions.Move(state.Common.ShiftX(me.X, -100), 250);
-            Action onExecuted = canBlink ? new Action(() => { }) : new Action(() => blink.Used(state));
-
-            result.Add(
-                new MoveIdea(escapeAction,
-                    $"Pulled Into Enemy Lines - Escape!",
-                    IdeaResult.HeroDeath(me),
-                    onExecuted));
-        }
-
         // ==== Shop for Items to POWER UP! ====
 
         if (Carrying < Consts.MAX_ITEMS)
@@ -1136,9 +1165,13 @@ public class IronmanCarry : HeroBot
             }
         }
 
-        return result
+        return result;
+    }
+
+    protected override List<MoveIdea> Prioritise(List<MoveIdea> ideas)
+    {
+        return ideas
             .OrderByDescending(x => x.Result.MyHeroDeaths)
-            .ThenByDescending(x => x.Result.MyHealth)
             .ThenByDescending(x => x.Result.MyDamage)
             .ThenByDescending(x => x.Result.EnemyHeroDeaths)
             .ThenByDescending(x => x.Result.EnemyUnitDeaths)
@@ -1156,6 +1189,9 @@ public class DrStrangeSupport : HeroBot
         Skills.Add(new AoEHealSkill());
         Skills.Add(new ShieldSkill());
         Skills.Add(new PullSkill());
+
+        Moves.Add(new StayBehindFrontLine());
+        Moves.Add(new EscapePullOrSpearflip());
     }
 
     protected override List<MoveIdea> GetIdeas(Hero me, GameState state)
@@ -1235,15 +1271,6 @@ public class DrStrangeSupport : HeroBot
                     IdeaResult.NoChange));
         }
 
-        if (state.Common.ForwardOfFrontLine(me.X))
-        {
-            // Spearflipped or Pulled into Enemy Lines - Get Out (Head Away from Lane)
-            result.Add(
-                new MoveIdea(Actions.Move(state.Common.ShiftX(me.X, -100), 250),
-                    $"Pulled Into Enemy Lines - Escape!",
-                    IdeaResult.HeroDeath(me)));
-        }
-
         // ==== Shop for Items to POWER UP! ====
 
         if (Carrying < Consts.MAX_ITEMS)
@@ -1267,7 +1294,12 @@ public class DrStrangeSupport : HeroBot
 
         // TODO: Add Skills - Pull, Shield, AoEHeal
 
-        return result
+        return result;
+    }
+
+    protected override List<MoveIdea> Prioritise(List<MoveIdea> ideas)
+    {
+        return ideas
             .OrderByDescending(x => x.Result.MyHeroDeaths)
             .ThenByDescending(x => x.Result.MyHealth)
             .ThenByDescending(x => x.Result.MyDamage)
@@ -1302,10 +1334,12 @@ public abstract class HeroBot
         var ideas = new List<MoveIdea>();
         ideas.AddRange(Moves.SelectMany(x => x.GetIdeas(@params)));
         ideas.AddRange(GetIdeas(@params.Hero, state));
-        return ideas;
+
+        return Prioritise(ideas);
     }
 
     protected abstract List<MoveIdea> GetIdeas(Hero hero, GameState state);
+    protected abstract List<MoveIdea> Prioritise(List<MoveIdea> ideas);
 }
 
 public static class Units
@@ -1428,6 +1462,13 @@ public class CommonEntities
         return (_state.MyTeam == 0)
             ? x += delta
             : x -= delta;
+    }
+
+    public bool ForwardOf(int posX, int checkX)
+    {
+        return (_state.MyTeam == 0)
+            ? posX > checkX
+            : posX < checkX;
     }
 
     public bool ForwardOfFrontLine(int x)
