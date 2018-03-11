@@ -654,6 +654,46 @@ public class StayBehindFrontLine : MoveIdeaMaker
     }
 }
 
+public class EvadeMeleeHeroes : MoveIdeaMaker
+{
+    private readonly int _shiftX;
+    private readonly int _shiftY;
+    private readonly int _yMin;
+
+    public EvadeMeleeHeroes(int shiftX = 200, int shiftY = 200, int yMin = 300)
+    {
+        _shiftX = shiftX;
+        _shiftY = shiftY;
+        _yMin = yMin;
+    }
+
+    protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
+    {
+        D.WL($"Heroes in Range of {p.HeroBot.Name}:");
+        p.InEnemiesRange
+            .OfType<Hero>()
+            .ToList()
+            .ForEach(x => D.WL($" - #{x.UnitId} {x.Attribs.HeroType} {x.AttackRange} {x.IsMelee} {p.State.Common.BehindFrontLine(x.X)}"));
+
+        var hero = p.InEnemiesRange
+            .OfType<Hero>()
+            .Where(x => x.IsMelee)
+            .Where(x => p.State.Common.BehindFrontLine(x.X))
+            .FirstOrDefault();
+
+        var escape = p.State.Bushes
+            .OrderBy(x => p.State.Common.MyTower.Distance(x))
+            .FirstOrDefault();
+
+        if (hero == null || hero.Coordinate == escape) return;
+
+        result.Add(
+            new MoveIdea(Actions.Move(escape),
+                $"Being Rushed by Enemy {hero.Attribs.HeroType}",
+                IdeaResult.HeroDeath(p.Hero)));
+    }
+}
+
 public class EscapePullOrSpearflip : MoveIdeaMaker
 {
     private readonly int _shiftX;
@@ -1138,6 +1178,7 @@ public class Entity
     public Coordinate Coordinate => new Coordinate(X, Y);
     public int AttackRange { get; private set; }
     public bool IsRanged => AttackRange >= 150;
+    public bool IsMelee => AttackRange < 150;
     public int Health { get; private set; }
     public int MaxHealth { get; private set; }
     public int HealthPercent => (int)(((float)Health / MaxHealth) * 100);
@@ -1252,6 +1293,7 @@ public class IronmanCarry : HeroBot
 
         Moves.Add(new AttackEnemiesInRange());
         Moves.Add(new DenyKills());
+        Moves.Add(new EvadeMeleeHeroes());
         Moves.Add(new StayBehindFrontLine(distanceFromFront: 50, lineStrength: 1));
         Moves.Add(new ThrowFireball());
         Moves.Add(new BurnEnemyFrontLine());
@@ -1286,6 +1328,7 @@ public class DrStrangeSupport : HeroBot
         Moves.Add(new StayBehindFrontLine(lineStrength: 2, distanceFromFront: 50, maxForwardOfFront: 0));
         Moves.Add(new AttackEnemiesInRange());
         Moves.Add(new DenyKills());
+        Moves.Add(new EvadeMeleeHeroes());
         Moves.Add(new EscapePullOrSpearflip());
         Moves.Add(new PullEnemies());
         Moves.Add(new ShieldHeroes(selfish: false));
