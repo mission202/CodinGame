@@ -147,6 +147,18 @@ public class IdeaResult
         return this;
     }
 
+    public IdeaResult Shield(Entity entity, int threat)
+    {
+        var wouldDie = threat >= entity.Health;
+
+        MyHealth += threat;
+
+        if (wouldDie && entity is Hero)
+            MyHeroDeaths--;
+
+        return this;
+    }
+
     public override string ToString() => $"MyHeroDeaths:{MyHeroDeaths} MyHealth:{MyHealth} MyDamage:{MyDamage} EnemyHeroDeaths:{EnemyHeroDeaths} EnemyUnitDeaths:{EnemyUnitDeaths}  EnemyHealth:{EnemyHealth} MyGoldEarned:{MyGoldEarned}";
 }
 
@@ -811,6 +823,52 @@ public class PullEnemies : MoveIdeaMaker
                  () => pull.Used(p.State)));
     }
 }
+
+public class ShieldHeroes: MoveIdeaMaker
+{
+    private readonly bool _selfish;
+    private readonly int _threatRequired;
+
+    public ShieldHeroes(bool selfish = false, int threatRequired = 50)
+    {
+        _selfish = selfish;
+        _threatRequired = threatRequired;
+    }
+
+    protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
+    {
+        var shield = p.HeroBot.Skills.OfType<ShieldSkill>().SingleOrDefault();
+        if (shield == null || !shield.CanUse(p.Hero, p.State)) return;
+
+        var heroes = p.State.Common.MyHeroes
+            .Where(x => x.Distance(p.Hero) <= 500)
+            .Select(x => new {
+                Hero = x,
+                Threat = p.State.Common.Enemies.Where(y => y.Distance(x) <= y.AttackRange).Sum(z => z.AttackDamage)
+            })
+            .Where(x => x.Threat >= _threatRequired)
+            .OrderBy(x => x.Hero.Health)
+            .ToList();
+
+        if (!heroes.Any()) return;
+
+        var target = _selfish && heroes.Any(x => x.Hero == p.Hero)
+            ? heroes.First(x => x.Hero == p.Hero)
+            : heroes.First();
+
+        if (target == null) return;
+
+        var score = IdeaResult
+            .ForHeroPosition(target.Hero, target.Threat)
+            .Shield(target.Hero, target.Threat);
+
+        result.Add(
+            new MoveIdea(shield.Move(p.Hero, p.State, target.Hero).WithMessage("SHIELD UP!"),
+                $"Shield @ {target.Hero.Attribs.HeroType} Against {target.Threat}",
+                 score,
+                 () => shield.Used(p.State)));
+    }
+}
 #endregion
 
 #region Domain Objects
@@ -1268,6 +1326,7 @@ public class DrStrangeSupport : HeroBot
         Moves.Add(new AttackEnemiesInRange());
         Moves.Add(new EscapePullOrSpearflip());
         Moves.Add(new PullEnemies());
+        Moves.Add(new ShieldHeroes(selfish: false));
         Moves.Add(new GoShopping(p1: GoShopping.Priority.Mana, p2: GoShopping.Priority.Damage, p3: GoShopping.Priority.Movement));
     }
 
