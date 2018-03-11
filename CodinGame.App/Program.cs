@@ -97,6 +97,28 @@ public class IdeaResult
             enemyHealth: -damage);
     }
 
+    public static IdeaResult HitEnemies(IEnumerable<Entity> entities, int damage)
+    {
+        var total = entities.Select(x =>
+        {
+            var willKill = x.Health <= damage;
+            var isHero = x is Hero;
+            return new
+            {
+                HeroDeaths = isHero && willKill ? 1 : 0,
+                UnitDeaths = !isHero && willKill ? 1 : 0,
+                GoldEarned = willKill ? x.GoldValue : 0,
+                EnemyHealth = -damage
+            };
+        }).ToList();
+
+        return new IdeaResult(
+            enemyHeroDeaths: total.Sum(x => x.HeroDeaths),
+            enemyUnitDeaths: total.Sum(x => x.UnitDeaths),
+            myGoldEarned: total.Sum(x => x.GoldEarned),
+            enemyHealth: total.Sum(x => x.EnemyHealth));
+    }
+
     public static IdeaResult ForHeroPosition(Hero hero, int threat)
     {
         var willDie = hero.Health <= threat;
@@ -395,60 +417,16 @@ public class Game
 public class ChargeSkill : UnitTargetedSkillMove
 {
     public ChargeSkill() : base("HULK", "CHARGE", 20, 4) { }
-
-    protected override bool ShouldUse(Hero hero, GameState state)
-    {
-        var heroInRange = state.Entities
-            .OfType<Hero>()
-            .Where(x => !x.IsNeutral)
-            .Where(x => x.Team != state.MyTeam)
-            .OrderByDescending(x => x.MovementSpeed) // Want to attack fastest unit due to movement speed debuff
-            .Where(x => x.Distance(hero) <= 300)
-            .FirstOrDefault();
-
-        if (heroInRange == null) return false;
-
-        TargetId = heroInRange.UnitId;
-        return true;
-    }
 }
 
 public class ExplosiveShieldSkill : SkillMove
 {
     public ExplosiveShieldSkill() : base("HULK", "EXPLOSIVESHIELD", 30, 8) { }
-
-    protected override bool ShouldUse(Hero hero, GameState state)
-    {
-        var threat = state.Entities
-            .Where(x => !x.IsNeutral)
-            .Where(x => x.Team != state.MyTeam)
-            .Where(x => x.Distance(hero) <= x.AttackRange)
-            .Sum(x => x.AttackDamage);
-
-        return threat > hero.MaxHealth * 0.2;
-    }
 }
 
 public class BashSkill : UnitTargetedSkillMove
 {
     public BashSkill() : base("HULK", "BASH", 40, 8) { }
-
-    protected override bool ShouldUse(Hero hero, GameState state)
-    {
-        var heroInRange = state.Entities
-            .OfType<Hero>()
-            .Where(x => !x.IsNeutral)
-            .Where(x => x.Team != state.MyTeam)
-            .Where(x => x.Distance(hero) <= 140)
-            .FirstOrDefault();
-
-        if (heroInRange == null) return false;
-
-        D.WL($"Targeted {heroInRange.Attribs.HeroType} ({heroInRange.UnitId}) @ {heroInRange.Distance(hero)}");
-
-        TargetId = heroInRange.UnitId;
-        return true;
-    }
 }
 #endregion
 
@@ -461,25 +439,6 @@ public class FireballSkill : CoordinateTargetedSkillMove
 public class BurningSkill : CoordinateTargetedSkillMove
 {
     public BurningSkill() : base("IRONMAN", "BURNING", 50, 5) { }
-
-    protected override bool ShouldUse(Hero hero, GameState state)
-    {
-        var heroInRange = state.Common.EnemyHeroes
-            .Where(x => x.Distance(hero) <= 250)
-            .FirstOrDefault();
-
-        if (heroInRange == null) return false;
-
-        // Splash Damage - 100px Radius
-        var nearby = state.Common.Enemies
-            .Where(x => x.Distance(heroInRange) <= 100)
-            .Count();
-
-        if (nearby < 2) return false;
-
-        Target = new Coordinate(heroInRange.X, heroInRange.Y);
-        return true;
-    }
 }
 
 public class BlinkSkill : CoordinateTargetedSkillMove
@@ -491,71 +450,17 @@ public class BlinkSkill : CoordinateTargetedSkillMove
 #region DOCTOR_STRANGE Skills
 public class AoEHealSkill : CoordinateTargetedSkillMove
 {
-    private bool _selfish;
-
-    public AoEHealSkill(bool selfish = false) : base("DOCTOR_STRANGE", "AOEHEAL", 50, 7)
-    {
-        _selfish = selfish;
-    }
-
-    protected override bool ShouldUse(Hero hero, GameState state)
-    {
-        var target = _selfish
-            ? hero
-            : state.Common.MyHeroes.SingleOrDefault(x => x.UnitId != hero.UnitId);
-
-        if (target == null) return false;
-
-        if (target.HealthPercent <= 75)
-        {
-            Target = new Coordinate(target.X, target.Y);
-            return true;
-        }
-
-        return false;
-
-        // TODO: Scan for area in range with MULTIPLE teammates needing healing.
-        // Range 250
-        // Radius 100
-    }
+    public AoEHealSkill() : base("DOCTOR_STRANGE", "AOEHEAL", 50, 7) { }
 }
 
 public class ShieldSkill : UnitTargetedSkillMove
 {
-    private bool _selfish;
-
-    public ShieldSkill(bool selfish = false) : base("DOCTOR_STRANGE", "SHIELD", 40, 6)
-    {
-        _selfish = selfish;
-    }
-
-    protected override bool ShouldUse(Hero hero, GameState state)
-    {
-        var target = _selfish
-            ? hero
-            : state.Common.MyHeroes.SingleOrDefault(x => x.UnitId != hero.UnitId);
-
-        if (target == null) return false;
-
-        if (target.HealthPercent <= 75)
-        {
-            TargetId = target.UnitId;
-            return true;
-        }
-
-        return false;
-    }
+    public ShieldSkill() : base("DOCTOR_STRANGE", "SHIELD", 40, 6) { }
 }
 
 public class PullSkill : UnitTargetedSkillMove
 {
     public PullSkill() : base("DOCTOR_STRANGE", "PULL", 40, 5) { }
-
-    protected override bool ShouldUse(Hero hero, GameState state)
-    {
-        // TODO: Scan for heroes in range (300), pull them if it means they are going to get ganked by troops.
-        return false;
-    }
 }
 #endregion
 
@@ -693,6 +598,48 @@ public class EscapePullOrSpearflip : MoveIdeaMaker
     }
 }
 
+public class BurnEnemyFrontLine : MoveIdeaMaker
+{
+    private readonly int _groupRequired;
+
+    public BurnEnemyFrontLine(int groupRequired = 2)
+    {
+        _groupRequired = groupRequired;
+    }
+
+    protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
+    {
+        var burning = p.HeroBot.Skills.OfType<BurningSkill>().SingleOrDefault();
+        if (burning == null || !burning.CanUse(p.Hero, p.State)) return;
+
+        var nearest = p.State.Common.EnemyUnits
+            .Where(x => x.Distance(p.Hero) <= 250)
+            .OrderBy(x => x.Distance(p.Hero))
+            .FirstOrDefault();
+
+        if (nearest == null) return;
+
+        // Splash Damage - 100px Radius
+        var nearby = p.State.Common.Enemies
+            .Where(x => x.Distance(nearest) <= 100)
+            .ToList();
+
+        if (nearby.Count() < _groupRequired) return;
+
+        var target = new Coordinate(nearest.X, nearest.Y);
+        var allEnemies = new List<Entity>();
+        allEnemies.Add(nearest);
+        allEnemies.AddRange(nearby);
+        var dmg = p.Hero.Attribs.ManaRegeneration * 5 + 30;
+
+        result.Add(
+            new MoveIdea(burning.Move(p.Hero, p.State, nearest.Coordinate).WithMessage("BURNNNNN!"),
+                $"Burn #{nearest.UnitId} and Surrounding {nearby.Count()} Units for {dmg * allEnemies.Count} Damage",
+                    IdeaResult.HitEnemies(allEnemies, dmg),
+                    () => burning.Used(p.State)));
+    }
+}
+
 public class ThrowFireball : MoveIdeaMaker
 {
     private readonly int _minRange;
@@ -707,33 +654,30 @@ public class ThrowFireball : MoveIdeaMaker
     protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
     {
         var fireball = p.HeroBot.Skills.OfType<FireballSkill>().SingleOrDefault();
-        if (fireball == null) return;
+        if (fireball == null || !fireball.CanUse(p.Hero, p.State)) return;
 
-        if (fireball.CanUse(p.Hero, p.State))
+        /*  • range: 900
+            • flytime: 0.9
+            • impact radius: 50
+            • Damage: current mana * 0.2 + 55 * distance traveled / 1000
+        */
+
+        var unitInRange = p.State.Common.EnemyUnits
+            .Where(x => x.Distance(p.Hero) >= _minRange) // Only Fire at Range for DMG
+            .Where(x => x.Distance(p.Hero) <= _maxRange)
+            .FirstOrDefault();
+
+        if (unitInRange != null)
         {
-            /*  • range: 900
-                • flytime: 0.9
-                • impact radius: 50
-                • Damage: current mana * 0.2 + 55 * distance traveled / 1000
-            */
-
-            var unitInRange = p.State.Common.EnemyUnits
-                .Where(x => x.Distance(p.Hero) >= _minRange) // Only Fire at Range for DMG
-                .Where(x => x.Distance(p.Hero) <= _maxRange)
-                .FirstOrDefault();
-
-            if (unitInRange != null)
-            {
-                var fireballAction = fireball
-                    .Move(p.Hero, p.State, unitInRange.Coordinate)
-                    .WithMessage("HADOUKEN!");
-                var damage = (int)(p.Hero.Attribs.Mana * 0.2 + 55 * p.Hero.Distance(unitInRange) / 1000);
-                result.Add(
-                    new MoveIdea(fireballAction,
-                        $"Throw Fireball @ {unitInRange.UnitType} #{unitInRange.UnitId} for {damage} Damage",
-                         IdeaResult.HitEnemy(unitInRange, damage),
-                         () => fireball.Used(p.State)));
-            }
+            var fireballAction = fireball
+                .Move(p.Hero, p.State, unitInRange.Coordinate)
+                .WithMessage("HADOUKEN!");
+            var damage = (int)(p.Hero.Attribs.Mana * 0.2 + 55 * p.Hero.Distance(unitInRange) / 1000);
+            result.Add(
+                new MoveIdea(fireballAction,
+                    $"Throw Fireball @ {unitInRange.UnitType} #{unitInRange.UnitId} for {damage} Damage",
+                     IdeaResult.HitEnemy(unitInRange, damage),
+                     () => fireball.Used(p.State)));
         }
     }
 }
@@ -858,8 +802,6 @@ public abstract class SkillMove : StrategicMove
 
 
     protected virtual string Command => $"{SkillName}";
-    protected virtual bool ShouldUse(Hero hero, GameState state) => true;
-
 
     public SkillMove(string forHero, string skillName, int manaCost, int cooldown)
     {
@@ -1181,6 +1123,7 @@ public class IronmanCarry : HeroBot
         Moves.Add(new AttackEnemiesInRange());
         Moves.Add(new StayBehindFrontLine(distanceFromFront: 50));
         Moves.Add(new ThrowFireball());
+        Moves.Add(new BurnEnemyFrontLine());
         Moves.Add(new EscapePullOrSpearflip());
         Moves.Add(new GoShopping());
     }
