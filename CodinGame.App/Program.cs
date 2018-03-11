@@ -540,6 +540,8 @@ public class GetIdeasParameters
 
 public abstract class MoveIdeaMaker
 {
+    protected readonly bool Debug = false;
+
     protected abstract void AddIdeas(GetIdeasParameters p, List<MoveIdea> result);
 
     public List<MoveIdea> GetIdeas(GetIdeasParameters @params)
@@ -549,10 +551,19 @@ public abstract class MoveIdeaMaker
         AddIdeas(@params, result);
         return result;
     }
+
+    protected MoveIdeaMaker(bool debug = false)
+    {
+        Debug = debug;
+    }
 }
 
 public class AttackEnemiesInRange : MoveIdeaMaker
 {
+    public AttackEnemiesInRange(bool debug = false) : base(debug)
+    {
+    }
+
     protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
     {
         if (!p.EnemiesInRange.Any()) return;
@@ -562,6 +573,9 @@ public class AttackEnemiesInRange : MoveIdeaMaker
             .ThenBy(x => x.Health)
             .Select(x => new { Entity = x, WillKill = x.Health <= p.Hero.AttackDamage })
             .ToList();
+
+        D.WL($"{p.HeroBot.Name} In Range:", Debug);
+        byHealth.ForEach(x => D.WL($" - #{x.Entity.UnitId} {x.Entity.UnitType} {x.Entity.Health}/{x.Entity.MaxHealth} - Kill? {x.WillKill}", Debug));
 
         var target = byHealth.FirstOrDefault(x => x.WillKill) ?? byHealth.FirstOrDefault();
 
@@ -927,11 +941,10 @@ public class ShieldHeroes : MoveIdeaMaker
 
 public class AoEHeal : MoveIdeaMaker
 {
-    private readonly bool _debug = false;
     private readonly int _minGroupSize;
     private readonly int _minHealAmount;
 
-    public AoEHeal(int minGroupSize = 3, int minHealAmount = 50)
+    public AoEHeal(int minGroupSize = 3, int minHealAmount = 50, bool debug = false) : base(debug)
     {
         _minGroupSize = minGroupSize;
         _minHealAmount = minHealAmount;
@@ -950,7 +963,7 @@ public class AoEHeal : MoveIdeaMaker
 
         if (!inRange.Any()) return;
 
-        D.WL($"Able to AoEHeal at {amount} Points", _debug);
+        D.WL($"Able to AoEHeal at {amount} Points", Debug);
 
         var calc = inRange.Select(unitInRange =>
         {
@@ -958,9 +971,9 @@ public class AoEHeal : MoveIdeaMaker
                 .Where(x => x.Distance(unitInRange) <= 100)
                 .ToList();
 
-            D.WL($"{unitInRange.UnitType} {unitInRange.UnitId} for AoHeal:", _debug);
-            nearby.ForEach(nearUnit => D.WL($" - {nearUnit.UnitType} #{nearUnit.UnitId} {nearUnit.Health}/{nearUnit.MaxHealth} - Healing: {Math.Min(amount, nearUnit.MaxHealth - nearUnit.Health)}", _debug));
-            D.WL($"Total: {nearby.Count} Units @ {nearby.Sum(x => Math.Min(amount, x.MaxHealth - x.Health))}.", _debug);
+            D.WL($"{unitInRange.UnitType} {unitInRange.UnitId} for AoHeal:", Debug);
+            nearby.ForEach(nearUnit => D.WL($" - {nearUnit.UnitType} #{nearUnit.UnitId} {nearUnit.Health}/{nearUnit.MaxHealth} - Healing: {Math.Min(amount, nearUnit.MaxHealth - nearUnit.Health)}", Debug));
+            D.WL($"Total: {nearby.Count} Units @ {nearby.Sum(x => Math.Min(amount, x.MaxHealth - x.Health))}.", Debug);
 
             return new
             {
@@ -1359,7 +1372,7 @@ public class IronmanCarry : HeroBot
 
         Moves.Add(new AttackEnemiesInRange());
         Moves.Add(new DenyKills());
-        Moves.Add(new StayBehindFrontLine(distanceFromFront: 75, lineStrength: 2));
+        Moves.Add(new StayBehindFrontLine(distanceFromFront: 50, lineStrength: 1));
         Moves.Add(new ThrowFireball());
         Moves.Add(new BurnEnemyFrontLine());
         Moves.Add(new EscapePullOrSpearflip());
@@ -1440,7 +1453,7 @@ public class DrStrangeSupport : HeroBot
         Skills.Add(new ShieldSkill());
         Skills.Add(new PullSkill());
 
-        Moves.Add(new StayBehindFrontLine(lineStrength: 3, distanceFromFront: 75));
+        Moves.Add(new StayBehindFrontLine(lineStrength: 2, distanceFromFront: 50));
         Moves.Add(new AttackEnemiesInRange());
         Moves.Add(new DenyKills());
         Moves.Add(new EscapePullOrSpearflip());
