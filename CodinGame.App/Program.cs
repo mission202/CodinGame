@@ -50,6 +50,7 @@ public class IdeaResult
     public int EnemyHealth { get; private set; }
     public int MyGoldEarned { get; private set; }
     public int Items { get; private set; }
+    public int DenyKills { get; private set; }
 
     public IdeaResult(
         int myHeroDeaths = 0,
@@ -59,7 +60,8 @@ public class IdeaResult
         int enemyUnitDeaths = 0,
         int enemyHealth = 0,
         int myGoldEarned = 0,
-        int items = 0)
+        int items = 0,
+        int denyKills = 0)
     {
         MyHeroDeaths = myHeroDeaths;
         MyHealth = myHealth;
@@ -68,6 +70,7 @@ public class IdeaResult
         EnemyUnitDeaths = enemyUnitDeaths;
         EnemyHealth = enemyHealth;
         MyGoldEarned = myGoldEarned;
+        DenyKills = denyKills;
     }
 
     public static IdeaResult NoChange => new IdeaResult();
@@ -122,6 +125,15 @@ public class IdeaResult
             MyHealth = item.Health,
             MyDamage = item.Damage,
             Items = 1
+        };
+    }
+
+    public static IdeaResult DenyKill(Entity entity)
+    {
+        return new IdeaResult
+        {
+            DenyKills = 1,
+            MyHealth = -entity.Health
         };
     }
 
@@ -835,6 +847,25 @@ public class PullEnemies : MoveIdeaMaker
     }
 }
 
+public class DenyKills : MoveIdeaMaker
+{
+    protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
+    {
+        var deniable = p.State.Common.Mine
+            .Where(x => x.Distance(p.Hero) <= p.Hero.AttackRange)
+            .Where(x => x.Health <= p.Hero.AttackDamage)
+            .OrderBy(x => x.Health)
+            .FirstOrDefault();
+
+        if (deniable == null) return;
+
+        result.Add(
+            new MoveIdea(Actions.Attack(deniable).WithMessage("Denied!!"),
+                $"Deny Kill of {deniable.UnitType} #{deniable.UnitId}",
+                 IdeaResult.DenyKill(deniable)));
+    }
+}
+
 public class ShieldHeroes : MoveIdeaMaker
 {
     private readonly bool _selfish;
@@ -1314,6 +1345,7 @@ public class IronmanCarry : HeroBot
         Skills.Add(new BlinkSkill());
 
         Moves.Add(new AttackEnemiesInRange());
+        Moves.Add(new DenyKills());
         Moves.Add(new StayBehindFrontLine(distanceFromFront: 75, lineStrength: 2));
         Moves.Add(new ThrowFireball());
         Moves.Add(new BurnEnemyFrontLine());
@@ -1375,7 +1407,8 @@ public class IronmanCarry : HeroBot
     {
         return ideas
             .OrderByDescending(x => x.Result.MyHeroDeaths)
-            .OrderByDescending(x => x.Result.Items)
+            .ThenByDescending(x => x.Result.DenyKills)
+            .ThenByDescending(x => x.Result.Items)
             .ThenByDescending(x => x.Result.MyDamage)
             .ThenByDescending(x => x.Result.EnemyHeroDeaths)
             .ThenByDescending(x => x.Result.EnemyUnitDeaths)
@@ -1396,6 +1429,7 @@ public class DrStrangeSupport : HeroBot
 
         Moves.Add(new StayBehindFrontLine(lineStrength: 2));
         Moves.Add(new AttackEnemiesInRange());
+        Moves.Add(new DenyKills());
         Moves.Add(new EscapePullOrSpearflip());
         Moves.Add(new PullEnemies());
         Moves.Add(new ShieldHeroes(selfish: false));
@@ -1457,6 +1491,7 @@ public class DrStrangeSupport : HeroBot
     {
         return ideas
             .OrderByDescending(x => x.Result.MyHeroDeaths)
+            .ThenByDescending(x => x.Result.DenyKills)
             .ThenByDescending(x => x.Result.Items)
             .ThenByDescending(x => x.Result.MyHealth)
             .ThenByDescending(x => x.Result.MyDamage)
