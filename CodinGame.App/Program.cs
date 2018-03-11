@@ -13,7 +13,7 @@ class Player
 {
     static void Main(string[] args)
     {
-        var game = new Game(outputShop: true);
+        var game = new Game(outputShop: false, outputUnits: false);
 
         while (true)
         {
@@ -338,7 +338,6 @@ public class AI
 
             var ideas = hero.GetIdeas(state);
 
-            // TODO: Pass Ideas to Role, With Scores. AI+Role Designation determines move(s) picked.
             if (ideas.Any())
             {
                 D.WL($"Ideas from {hero.Name}:");
@@ -502,25 +501,24 @@ public class AttackEnemiesInRange : MoveIdeaMaker
 {
     protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
     {
-        if (p.EnemiesInRange.Any())
-        {
-            var byHealth = p.EnemiesInRange
-                .OrderByDescending(x => x.UnitType) /* UNITs Before Heroes to Avoid Aggro */
-                .ThenBy(x => x.Health)
-                .Select(x => new { Entity = x, WillKill = x.Health <= p.Hero.AttackDamage })
-                .ToList();
+        if (!p.EnemiesInRange.Any()) return;
 
-            var target = byHealth.FirstOrDefault(x => x.WillKill) ?? byHealth.FirstOrDefault();
+        var byHealth = p.EnemiesInRange
+            .OrderByDescending(x => x.UnitType) /* UNITs Before Heroes to Avoid Aggro */
+            .ThenBy(x => x.Health)
+            .Select(x => new { Entity = x, WillKill = x.Health <= p.Hero.AttackDamage })
+            .ToList();
 
-            var score = target.WillKill
-                ? IdeaResult.EnemyKill(target.Entity, p.Threat)
-                : IdeaResult.Attack(p.Hero, target.Entity, p.Threat);
+        var target = byHealth.FirstOrDefault(x => x.WillKill) ?? byHealth.FirstOrDefault();
 
-            result.Add(
-                new MoveIdea(Actions.Attack(target.Entity),
-                    $"Attack Enemy In Range {target.Entity.UnitId} {target.Entity.UnitType} (Kill? {target.WillKill})",
-                    score));
-        }
+        var score = target.WillKill
+            ? IdeaResult.EnemyKill(target.Entity, p.Threat)
+            : IdeaResult.Attack(p.Hero, target.Entity, p.Threat);
+
+        result.Add(
+            new MoveIdea(Actions.Attack(target.Entity),
+                $"Attack Enemy In Range {target.Entity.UnitId} {target.Entity.UnitType} (Kill? {target.WillKill})",
+                score));
     }
 }
 
@@ -709,6 +707,8 @@ public class GoShopping : MoveIdeaMaker
             .Where(x => !x.IsInstant)
             .Affordable(p.State.PlayerGold);
 
+        if (!affordable.Any()) return;
+
         for (int i = 0; i < _priorities.Length; i++)
             affordable = OrderByPriority(affordable, _priorities[i]);
 
@@ -893,7 +893,7 @@ public class Hero : Entity
     public Attributes Attribs { get; private set; }
 
     public Hero(int unitId, int team, int x, int y, int attackRange, int health, int maxHealth, int shield, int attackDamage, int movementSpeed, int stunDuration, int goldValue, Attributes heroAttribs)
-        : base(unitId, team, Units.HERO, x, y, attackRange, health, maxHealth, shield, attackRange, movementSpeed, stunDuration, goldValue)
+        : base(unitId, team, Units.HERO, x, y, attackRange, health, maxHealth, shield, attackDamage, movementSpeed, stunDuration, goldValue)
     {
         Attribs = heroAttribs;
     }
@@ -1202,6 +1202,7 @@ public class DrStrangeSupport : HeroBot
         Skills.Add(new PullSkill());
 
         Moves.Add(new StayBehindFrontLine());
+        Moves.Add(new AttackEnemiesInRange());
         Moves.Add(new EscapePullOrSpearflip());
         Moves.Add(new GoShopping(p1: GoShopping.Priority.Mana, p2: GoShopping.Priority.Damage, p3: GoShopping.Priority.Movement));
     }
@@ -1252,38 +1253,6 @@ public class DrStrangeSupport : HeroBot
                     new IdeaResult(myHeroDeaths: 1, myHealth: me.Health + wtb.Health)));
             }
         }
-
-        if (enemiesInRange.Any())
-        {
-            var byHealth = enemiesInRange
-                .OrderByDescending(x => x.UnitType) /* UNITs Before Heroes to Avoid Aggro */
-                .ThenBy(x => x.Health)
-                .Select(x => new { Entity = x, WillKill = x.Health <= me.AttackDamage })
-                .ToList();
-
-            var target = byHealth.FirstOrDefault(x => x.WillKill) ?? byHealth.FirstOrDefault();
-
-            var score = target.WillKill
-                ? IdeaResult.EnemyKill(target.Entity, threat)
-                : IdeaResult.Attack(me, target.Entity, threat);
-
-            result.Add(
-                new MoveIdea(Actions.Attack(target.Entity),
-                    $"Attack Enemy In Range {target.Entity.UnitId} {target.Entity.UnitType} (Kill? {target.WillKill})",
-                    score));
-        }
-        else
-        {
-            // Move to Front Line
-            var frontLine = state.Common.MyFrontLine;
-            var shifted = state.Common.ShiftX(frontLine, -50);
-            result.Add(
-                new MoveIdea(Actions.Move(shifted, state.Common.MyTower.Y),
-                    $"Move to Front Line {shifted},{state.Common.MyTower.Y}",
-                    IdeaResult.NoChange));
-        }
-
-        // TODO: Add Skills - Pull, Shield, AoEHeal
 
         return result;
     }
