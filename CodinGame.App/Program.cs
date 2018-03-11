@@ -159,6 +159,17 @@ public class IdeaResult
         return this;
     }
 
+    public IdeaResult Heal(int amount)
+    {
+        // TODO: Make Heal Score Calc Accurate
+        // Can be multiple units, and amounts will vary based on what needs to be healed vs. amount of healing.
+        // e.g. Math.Min(amount, x.MaxHealth - x.Health)
+        // If Entities contain a hero, may affect hero deaths etc.
+
+        MyHealth += amount;
+        return this;
+    }
+
     public override string ToString() => $"MyHeroDeaths:{MyHeroDeaths} MyHealth:{MyHealth} MyDamage:{MyDamage} EnemyHeroDeaths:{EnemyHeroDeaths} EnemyUnitDeaths:{EnemyUnitDeaths}  EnemyHealth:{EnemyHealth} MyGoldEarned:{MyGoldEarned}";
 }
 
@@ -824,7 +835,7 @@ public class PullEnemies : MoveIdeaMaker
     }
 }
 
-public class ShieldHeroes: MoveIdeaMaker
+public class ShieldHeroes : MoveIdeaMaker
 {
     private readonly bool _selfish;
     private readonly int _threatRequired;
@@ -842,7 +853,8 @@ public class ShieldHeroes: MoveIdeaMaker
 
         var heroes = p.State.Common.MyHeroes
             .Where(x => x.Distance(p.Hero) <= 500)
-            .Select(x => new {
+            .Select(x => new
+            {
                 Hero = x,
                 Threat = p.State.Common.Enemies.Where(y => y.Distance(x) <= y.AttackRange).Sum(z => z.AttackDamage)
             })
@@ -867,6 +879,66 @@ public class ShieldHeroes: MoveIdeaMaker
                 $"Shield @ {target.Hero.Attribs.HeroType} Against {target.Threat}",
                  score,
                  () => shield.Used(p.State)));
+    }
+}
+
+public class AoEHeal : MoveIdeaMaker
+{
+    private readonly int _minGroupSize;
+    private readonly int _minHealAmount;
+
+    public AoEHeal(int minGroupSize = 3, int minHealAmount = 50)
+    {
+        _minGroupSize = minGroupSize;
+        _minHealAmount = minHealAmount;
+    }
+
+    protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
+    {
+        var heal = p.HeroBot.Skills.OfType<AoEHealSkill>().SingleOrDefault();
+        if (heal == null || !heal.CanUse(p.Hero, p.State)) return;
+
+        var amount = (int)(p.Hero.Attribs.Mana * 0.2);
+        var inRange = p.State.Common.Mine
+            .Where(x => x.Distance(p.Hero) <= 250)
+            .OrderBy(x => x.HealthPercent)
+            .ToList();
+
+        if (!inRange.Any()) return;
+
+        D.WL($"Able to AoEHeal at {amount} Points");
+
+        var calc = inRange.Select(unitInRange =>
+        {
+            var nearby = p.State.Common.Mine
+                .Where(x => x.Distance(unitInRange) <= 100)
+                .ToList();
+
+            D.WL($"{unitInRange.UnitType} {unitInRange.UnitId} for AoHeal:");
+            nearby.ForEach(nearUnit => D.WL($" - {nearUnit.UnitType} #{nearUnit.UnitId} {nearUnit.Health}/{nearUnit.MaxHealth} - Healing: {Math.Min(amount, nearUnit.MaxHealth - nearUnit.Health)}"));
+            D.WL($"Total: {nearby.Count} Units @ {nearby.Sum(x => Math.Min(amount, x.MaxHealth - x.Health))}.");
+
+            return new
+            {
+                Target = unitInRange,
+                Nearby = nearby,
+                Count = nearby.Count,
+                Healing = nearby.Sum(x => Math.Min(amount, x.MaxHealth - x.Health))
+            };
+        });
+
+        var match = calc.FirstOrDefault(x => x.Count >= _minGroupSize && x.Healing >= _minHealAmount);
+
+        if (match == null) return;
+
+        var score = new IdeaResult()
+            .Heal(match.Healing);
+
+        result.Add(
+            new MoveIdea(heal.Move(p.Hero, p.State, match.Target.Coordinate).WithMessage("YOU ARE HEALED!"),
+                $"AoE Heal @ {match.Target.Coordinate} for {match.Healing}hp",
+                 score,
+                 () => heal.Used(p.State)));
     }
 }
 #endregion
@@ -1242,7 +1314,7 @@ public class IronmanCarry : HeroBot
         Skills.Add(new BlinkSkill());
 
         Moves.Add(new AttackEnemiesInRange());
-        Moves.Add(new StayBehindFrontLine(distanceFromFront: 50));
+        Moves.Add(new StayBehindFrontLine(distanceFromFront: 75, lineStrength: 2));
         Moves.Add(new ThrowFireball());
         Moves.Add(new BurnEnemyFrontLine());
         Moves.Add(new EscapePullOrSpearflip());
@@ -1322,11 +1394,12 @@ public class DrStrangeSupport : HeroBot
         Skills.Add(new ShieldSkill());
         Skills.Add(new PullSkill());
 
-        Moves.Add(new StayBehindFrontLine());
+        Moves.Add(new StayBehindFrontLine(lineStrength: 2));
         Moves.Add(new AttackEnemiesInRange());
         Moves.Add(new EscapePullOrSpearflip());
         Moves.Add(new PullEnemies());
         Moves.Add(new ShieldHeroes(selfish: false));
+        Moves.Add(new AoEHeal(minGroupSize: 2, minHealAmount: 50));
         Moves.Add(new GoShopping(p1: GoShopping.Priority.Mana, p2: GoShopping.Priority.Damage, p3: GoShopping.Priority.Movement));
     }
 
@@ -1452,6 +1525,8 @@ public struct Coordinate
 
     public static bool operator ==(Coordinate a, Coordinate b) => a.X == b.X && a.Y == b.Y;
     public static bool operator !=(Coordinate a, Coordinate b) => a.X != b.X || a.Y != b.Y;
+
+    public override string ToString() => $"{X},{Y}";
 }
 
 public class CommonEntities
