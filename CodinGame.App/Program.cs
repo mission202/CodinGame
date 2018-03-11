@@ -906,6 +906,7 @@ public class DenyKills : MoveIdeaMaker
     protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
     {
         var deniable = p.State.Common.Mine
+            .Where(x => x.UnitId != p.Hero.UnitId)
             .Where(x => x.Distance(p.Hero) <= p.Hero.AttackRange)
             .Where(x => x.Health <= p.Hero.AttackDamage)
             .OrderBy(x => x.Health)
