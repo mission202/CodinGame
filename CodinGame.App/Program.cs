@@ -491,7 +491,7 @@ public class GetIdeasParameters
         InEnemiesRange = state.Common.Enemies.Where(x => x.Distance(Hero) <= x.AttackRange).ToList();
         Threat = InEnemiesRange.Sum(x => x.AttackDamage);
 
-        if (state.Common.EnemyTower.Distance(Hero) <= Consts.TOWER_RANGE) Threat+= Consts.TOWER_DAMAGE;
+        if (state.Common.EnemyTower.Distance(Hero) <= Consts.TOWER_RANGE) Threat += Consts.TOWER_DAMAGE;
     }
 }
 
@@ -769,6 +769,48 @@ public class GoShopping : MoveIdeaMaker
     }
 }
 
+public class PullEnemies : MoveIdeaMaker
+{
+    private readonly int _gangSize;
+    private readonly int _minRange;
+
+    public PullEnemies(int gangSize = 3, int minRange = 200)
+    {
+        _gangSize = gangSize;
+        _minRange = minRange;
+    }
+
+    protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
+    {
+        var pull = p.HeroBot.Skills.OfType<PullSkill>().SingleOrDefault();
+        if (pull == null || !pull.CanUse(p.Hero, p.State)) return;
+
+        // TODO: Consider Using on Friendlies Pulled into Enemy Lines?
+
+        var heroInRange = p.State.Common.EnemyHeroes
+            .Where(x => x.Distance(p.Hero) >= _minRange) // Only Fire at Range for DMG
+            .Where(x => x.Distance(p.Hero) <= 400)
+            .FirstOrDefault();
+
+        if (heroInRange == null) return;
+
+        var estimatedPos = new Coordinate(p.State.Common.ShiftX(heroInRange.X, -200), heroInRange.Y);
+
+        var gang = p.State.Common.Mine
+            .Where(x => x.Distance(estimatedPos) <= x.AttackRange)
+            .ToList();
+
+        if (gang.Count() <= _gangSize) return;
+
+        var dmg = gang.Sum(x => x.AttackDamage);
+
+        result.Add(
+            new MoveIdea(pull.Move(p.Hero, p.State, heroInRange).WithMessage("GET OVER HERE!"),
+                $"Pull @ {heroInRange.Attribs.HeroType} Aiming to Gank for {dmg} Damage by {gang.Count()} Units",
+                 new IdeaResult().AttackEnemy(heroInRange, dmg),
+                 () => pull.Used(p.State)));
+    }
+}
 #endregion
 
 #region Domain Objects
@@ -786,6 +828,12 @@ public abstract class UnitTargetedSkillMove : SkillMove
 
     public UnitTargetedSkillMove(string forHero, string skillName, int manaCost, int cooldown) : base(forHero, skillName, manaCost, cooldown)
     {
+    }
+
+    public string Move(Hero hero, GameState state, Entity target)
+    {
+        TargetId = target.UnitId;
+        return Move(hero, state);
     }
 }
 
@@ -1219,6 +1267,7 @@ public class DrStrangeSupport : HeroBot
         Moves.Add(new StayBehindFrontLine());
         Moves.Add(new AttackEnemiesInRange());
         Moves.Add(new EscapePullOrSpearflip());
+        Moves.Add(new PullEnemies());
         Moves.Add(new GoShopping(p1: GoShopping.Priority.Mana, p2: GoShopping.Priority.Damage, p3: GoShopping.Priority.Movement));
     }
 
