@@ -369,7 +369,7 @@ public class AI
 
     public string[] GetMoves(GameState state)
     {
-        var response = new List<string>();
+        var moveIdeas = new List<MoveIdea>();
 
         foreach (var hero in _heroes)
         {
@@ -380,36 +380,38 @@ public class AI
                 continue;
             }
 
-            var ideas = hero.GetIdeas(state);
+            var heroesIdeas = hero.GetIdeas(state);
 
-            if (ideas.Any())
+            if (heroesIdeas.Any())
             {
                 D.WL($"Ideas from {hero.Name}:");
-                foreach (var idea in ideas)
+                foreach (var idea in heroesIdeas)
                 {
                     D.WL($"  - {idea.Command} : {idea.Reason} ({idea.Result})");
                 }
 
-                var executing = ideas.First();
+                var executing = heroesIdeas.First();
 
-                // Basic De-Dupe (Esp. for Denies)
-                if (response.Contains(executing.Command) && ideas.Count > 1)
+                if (heroesIdeas.Count > 1)
                 {
-                    D.WL($"Skipping {executing.Command} as Duplicate");
-                    executing = ideas.Skip(1).First();
+                    // Basic De-Dupe (Esp. for Denies)
+                    if (moveIdeas.Any(x => x.Command == executing.Command) && executing.Command.Contains("Denied!"))
+                    {
+                        executing = heroesIdeas.Skip(1).First();
+                    }
                 }
 
-                response.Add(executing.Command);
+                moveIdeas.Add(executing);
                 executing.OnExecuted();
                 continue;
             }
-            else
-                D.WL($"{hero.Name} is out of ideas.");
 
-            response.Add(Actions.Default(hero.Name));
+            moveIdeas.Add(new MoveIdea(Actions.Wait, $"{hero.Name} is out of ideas...", IdeaResult.NoChange));
         }
 
-        return response.ToArray();
+        return moveIdeas
+            .Select(x => x.Command)
+            .ToArray();
     }
 }
 
@@ -572,6 +574,7 @@ public class AttackEnemiesInRange : MoveIdeaMaker
             .OrderByDescending(x => x.UnitType) /* UNITs Before Heroes to Avoid Aggro */
             .ThenBy(x => x.Health)
             .Select(x => new { Entity = x, WillKill = x.Health <= p.Hero.AttackDamage })
+            .Take(3)
             .ToList();
 
         D.WL($"{p.HeroBot.Name} In Range:", Debug);
@@ -594,11 +597,13 @@ public class StayBehindFrontLine : MoveIdeaMaker
 {
     private readonly int _distanceFromFront;
     private readonly int _lineStrength;
+    private readonly int _maxForwardOfFront;
 
-    public StayBehindFrontLine(int distanceFromFront = 50, int lineStrength = 3)
+    public StayBehindFrontLine(int distanceFromFront = 50, int lineStrength = 3, int maxForwardOfFront = 0)
     {
         _distanceFromFront = distanceFromFront;
         _lineStrength = lineStrength;
+        _maxForwardOfFront = maxForwardOfFront;
     }
 
     protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
@@ -621,6 +626,18 @@ public class StayBehindFrontLine : MoveIdeaMaker
 
         var frontLine = (int)p.State.Common.MyUnits.Average(x => x.X);
         var shifted = p.State.Common.ShiftX(frontLine, -_distanceFromFront);
+
+        var maxForward = p.State.Common.ShiftX(shifted, _maxForwardOfFront);
+        if (p.State.Common.ForwardOf(p.Hero.Coordinate.X, maxForward))
+        {
+            result.Add(
+                new MoveIdea(Actions.Move(p.State.Common.MyTower),
+                    $"Drifted Beyond Max Forward of Front - {_maxForwardOfFront}. Return to Line",
+                    IdeaResult.HeroDeath(p.Hero)));
+
+            return;
+        }
+
         var ideaResult = IdeaResult.ForHeroPosition(p.Hero, p.Threat);
         var coord = new Coordinate(shifted, p.State.Common.MyTower.Y);
 
@@ -1219,155 +1236,6 @@ public class Item
     public override string ToString() => $"{Name} {Cost}g DMG:{Damage} ({DamagePerGold}) H:{Health} MH:{MaxHealth} M:{Mana} MM:{MaxMana} MR:{ManaRegeneration} ({ManaRegenPerGold}) MV:{MoveSpeed} ({MoveSpeedPerGold}) Potion? {IsPotion} Instant? {IsInstant}";
 }
 
-public class HulkJungler : HeroBot
-{
-    public HulkJungler() : base("HULK", 95)
-    {
-
-    }
-
-    protected override List<MoveIdea> GetIdeas(Hero me, GameState state)
-    {
-        var result = new List<MoveIdea>();
-
-        // Jungler: Hide in Trees, Kill Groots (100g)
-
-        // TODO: Separate Ideas from Rating/Ordering (Role)
-        // Ideas = "What I Could Do", Priority = "Given My Role"
-
-        // TODO: Update to Only Run When I Cant Kill a Groot (w/ 250 Helth @ 50 Damage)
-        if (me.HealthPercent <= 25)
-        {
-            var bushAtTower = state.Bushes
-                .OrderBy(x => state.Common.MyTower.Distance(x))
-                .First();
-
-            var runCmd = me.X == bushAtTower.X && me.Y == bushAtTower.Y
-                ? Actions.Wait
-                : Actions.Move(bushAtTower);
-
-            result.Add(new MoveIdea(
-                    runCmd,
-                    $"Health Dangerously Low ({me.HealthPercent}%) - Hide!",
-                    IdeaResult.HeroDeath(me)));
-
-            // Can We Buy A Potion?
-            var wtb = state.Items
-                .Where(x => x.IsInstant)
-                .Where(x => x.Health > 0)
-                .Affordable(state.PlayerGold)
-                .OrderBy(x => x.Health / x.Cost)
-                .FirstOrDefault();
-
-            if (wtb != null)
-            {
-                result.Add(new MoveIdea(
-                    Actions.Buy(wtb.Name),
-                    $"Health Dangerously Low ({me.HealthPercent}%) - Heal!",
-                    new IdeaResult(myHeroDeaths: 1, myHealth: me.Health + wtb.Health)));
-            }
-        }
-
-        var threatsAboveLane = state.Common.Enemies
-            .Where(x => x.Y < 350)
-            .Where(x => x.Distance(me) <= x.AttackRange + Consts.SAFETY_DIST)
-            .OrderBy(x => x.Distance(me))
-            .ToList();
-
-        if (threatsAboveLane.Any())
-        {
-            foreach (var threat in threatsAboveLane)
-            {
-                /* Heroes have an attack time of 0.1 and units have an attack time of 0.2
-                 * The time used to move is distance / moveSpeed
-                 * So if your hero has 75 range and travels a distance of 100 on the map, at 200
-                 * moveSpeed, it uses up 100 / 200 = 0.5 turn time and still has half the turn
-                 * left to attack. The attack will take place at 0.5 + 0.1 since the hero is melee
-                 * in this case.
-                 */
-
-                // TODO: Calculate Properly!?
-                var threatScore = threat.Health < me.AttackDamage
-                    ? new IdeaResult(enemyUnitDeaths: 1, enemyHealth: -threat.Health)
-                    : new IdeaResult(enemyHealth: -threat.Health);
-
-                result.Add(new MoveIdea(
-                    Actions.Attack(threat),
-                    $"Threat {threat.UnitId} @ {threat.Distance(me)}",
-                    threatScore));
-            }
-        }
-
-        var grootTargets = state.Common.Groots
-            .Where(x => state.Common.BehindFrontLine(x.X))
-            .Where(x => x.Distance(state.Common.EnemyTower) > Consts.TOWER_RANGE)
-            .OrderBy(x => x.Distance(me))
-            .ToList();
-
-        if (grootTargets.Any())
-        {
-            var safety = me.MaxHealth / 100 * 25;
-            var healthRequired = ((400 / me.AttackDamage) * 35) + safety;
-            var nearest = grootTargets.FirstOrDefault();
-            if (nearest != null && me.Health > healthRequired)
-            {
-                int nearestD = nearest.Distance(me);
-                if (nearestD <= (me.AttackRange - Consts.SAFETY_DIST))
-                {
-                    result.Add(new MoveIdea(
-                        Actions.Attack(nearest),
-                        "Groot In Attack Range",
-                        IdeaResult.GrootKill));
-                }
-                else
-                {
-                    result.Add(new MoveIdea(
-                        Actions.MoveAttack(nearest),
-                        "Move to Engage Nearest Attack Range",
-                        IdeaResult.GrootKill));
-
-                    if (me.HealthPercent <= 25 && nearestD <= 150)
-                    {
-                        // Likely have aggro! MUST KILL IT!
-                        result.Add(new MoveIdea(
-                            Actions.MoveAttack(nearest),
-                            "Health Critical With Aggro!",
-                            new IdeaResult(myGoldEarned: 150, myHeroDeaths: 1, myHealth: -me.Health)));
-                    }
-                }
-            }
-        }
-
-        // Let's Also Smash Some Enemy Units for LOLs
-        var nearestEnemy = state.Common.EnemyUnits
-            .Where(x => x.Distance(state.Common.EnemyTower) >= Consts.TOWER_RANGE)
-            .OrderBy(x => x.Distance(me))
-            .ThenBy(x => x.Health)
-            .FirstOrDefault();
-
-        if (nearestEnemy != null)
-        {
-            result.Add(new MoveIdea(
-                Actions.Attack(nearestEnemy),
-                    $"No Groots, Lets Just Smash {nearestEnemy.UnitType} #{nearestEnemy.UnitId}",
-                    IdeaResult.HitEnemy(me, nearestEnemy)));
-        }
-
-        return result;
-    }
-
-    protected override List<MoveIdea> Prioritise(List<MoveIdea> ideas)
-    {
-        return ideas
-            .OrderByDescending(x => x.Result.MyHeroDeaths)
-            .ThenByDescending(x => x.Result.MyGoldEarned)
-            .ThenByDescending(x => x.Result.MyHealth)
-            .ThenByDescending(x => x.Result.MyDamage)
-            .ThenBy(x => x.Result.EnemyHealth)
-            .ToList();
-    }
-}
-
 public class IronmanCarry : HeroBot
 {
 
@@ -1384,56 +1252,6 @@ public class IronmanCarry : HeroBot
         Moves.Add(new BurnEnemyFrontLine());
         Moves.Add(new EscapePullOrSpearflip());
         Moves.Add(new GoShopping(maxSlots: Consts.MAX_ITEMS - 1));
-    }
-
-    protected override List<MoveIdea> GetIdeas(Hero me, GameState state)
-    {
-        // Find Bush Closest to Front, Hide in it. Kill enemies in range/spells
-        var result = new List<MoveIdea>();
-
-        // Check for Enemies in Range
-        var enemiesInRange = state.Common.Enemies.Where(x => x.Distance(me) <= me.AttackRange).ToList();
-        var inEnemiesRange = state.Common.Enemies.Where(x => x.Distance(me) <= x.AttackRange).ToList();
-        var threat = inEnemiesRange.Sum(x => x.AttackDamage);
-
-        if (me.Health <= threat + 50)
-        {
-            var bushAtTower = state.Bushes
-                .OrderBy(x => state.Common.MyTower.Distance(x))
-                .First();
-
-            bool alreadyThere = me.X == bushAtTower.X && me.Y == bushAtTower.Y;
-            var runCmd = alreadyThere
-                ? Actions.Wait
-                : Actions.Move(bushAtTower);
-
-            var runResult = alreadyThere
-                ? new IdeaResult()
-                : IdeaResult.HeroDeath(me);
-
-            result.Add(new MoveIdea(
-                    runCmd,
-                    $"Risk of Death (Threat @ {threat}) - Hide!",
-                    runResult));
-
-            // Can We Buy A Potion?
-            var wtb = state.Items
-                .Where(x => x.IsInstant)
-                .Where(x => x.Health > 0)
-                .Affordable(state.PlayerGold)
-                .OrderBy(x => x.Health / x.Cost)
-                .FirstOrDefault();
-
-            if (wtb != null)
-            {
-                result.Add(new MoveIdea(
-                    Actions.Buy(wtb.Name),
-                    $"Health Dangerously Low ({me.Health}) - Heal!",
-                    new IdeaResult(myHeroDeaths: 1, myHealth: me.Health + wtb.Health)));
-            }
-        }
-
-        return result;
     }
 
     protected override List<MoveIdea> Prioritise(List<MoveIdea> ideas)
@@ -1460,7 +1278,7 @@ public class DrStrangeSupport : HeroBot
         Skills.Add(new ShieldSkill());
         Skills.Add(new PullSkill());
 
-        Moves.Add(new StayBehindFrontLine(lineStrength: 2, distanceFromFront: 50));
+        Moves.Add(new StayBehindFrontLine(lineStrength: 2, distanceFromFront: 50, maxForwardOfFront: 0));
         Moves.Add(new AttackEnemiesInRange());
         Moves.Add(new DenyKills());
         Moves.Add(new EscapePullOrSpearflip());
@@ -1472,56 +1290,6 @@ public class DrStrangeSupport : HeroBot
             p2: GoShopping.Priority.Damage,
             p3: GoShopping.Priority.Movement,
             maxSlots: 2));
-    }
-
-    protected override List<MoveIdea> GetIdeas(Hero me, GameState state)
-    {
-        // Find Bush Closest to Front, Hide in it. Kill enemies in range/spells
-        var result = new List<MoveIdea>();
-
-        // Check for Enemies in Range
-        var enemiesInRange = state.Common.Enemies.Where(x => x.Distance(me) <= me.AttackRange).ToList();
-        var inEnemiesRange = state.Common.Enemies.Where(x => x.Distance(me) <= x.AttackRange).ToList();
-        var threat = inEnemiesRange.Sum(x => x.AttackDamage);
-
-        if (me.Health <= threat + 50)
-        {
-            var bushAtTower = state.Bushes
-                .OrderBy(x => state.Common.MyTower.Distance(x))
-                .First();
-
-            bool alreadyThere = me.X == bushAtTower.X && me.Y == bushAtTower.Y;
-            var runCmd = alreadyThere
-                ? Actions.Wait
-                : Actions.Move(bushAtTower);
-
-            var runResult = alreadyThere
-                ? new IdeaResult()
-                : IdeaResult.HeroDeath(me);
-
-            result.Add(new MoveIdea(
-                    runCmd,
-                    $"Risk of Death (Threat @ {threat}) - Hide!",
-                    runResult));
-
-            // Can We Buy A Potion?
-            var wtb = state.Items
-                .Where(x => x.IsInstant)
-                .Where(x => x.Health > 0)
-                .Affordable(state.PlayerGold)
-                .OrderBy(x => x.Health / x.Cost)
-                .FirstOrDefault();
-
-            if (wtb != null)
-            {
-                result.Add(new MoveIdea(
-                    Actions.Buy(wtb.Name),
-                    $"Health Dangerously Low ({me.Health}) - Heal!",
-                    new IdeaResult(myHeroDeaths: 1, myHealth: me.Health + wtb.Health)));
-            }
-        }
-
-        return result;
     }
 
     protected override List<MoveIdea> Prioritise(List<MoveIdea> ideas)
@@ -1558,16 +1326,9 @@ public abstract class HeroBot
     public List<MoveIdea> GetIdeas(GameState state)
     {
         var @params = new GetIdeasParameters(this, state);
-
-        // Get Ideas from Registered Moves AND Inline Methods
-        var ideas = new List<MoveIdea>();
-        ideas.AddRange(Moves.SelectMany(x => x.GetIdeas(@params)));
-        ideas.AddRange(GetIdeas(@params.Hero, state));
-
-        return Prioritise(ideas);
+        return Prioritise(Moves.SelectMany(x => x.GetIdeas(@params)).ToList());
     }
 
-    protected abstract List<MoveIdea> GetIdeas(Hero hero, GameState state);
     protected abstract List<MoveIdea> Prioritise(List<MoveIdea> ideas);
 }
 
