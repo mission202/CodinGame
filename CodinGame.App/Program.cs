@@ -78,23 +78,10 @@ public class IdeaResult
 
     public static IdeaResult HitEnemy(Hero hero, Entity entity)
     {
-        var score = HitEnemy(entity, hero.AttackDamage);
+        var score = new IdeaResult().AttackEnemy(entity, hero);
         var willKill = entity.Health <= hero.AttackDamage;
         if (willKill) score.MyGoldEarned += entity.GoldValue;
         return score;
-    }
-
-    public static IdeaResult HitEnemy(Entity entity, int damage)
-    {
-        var willKill = entity.Health <= damage;
-        var isHero = entity is Hero;
-        var ehd = isHero && willKill ? 1 : 0;
-        var eud = !isHero && willKill ? 1 : 0;
-
-        return new IdeaResult(
-            enemyHeroDeaths: ehd,
-            enemyUnitDeaths: eud,
-            enemyHealth: -damage);
     }
 
     public static IdeaResult HitEnemies(IEnumerable<Entity> entities, int damage)
@@ -136,6 +123,28 @@ public class IdeaResult
             MyDamage = item.Damage,
             Items = 1
         };
+    }
+
+    public IdeaResult AttackEnemy(Entity enemy, Hero hero)
+    {
+        return AttackEnemy(enemy, hero.AttackDamage);
+    }
+
+    public IdeaResult AttackEnemy(Entity enemy, int damage)
+    {
+        var willKill = enemy.Health <= damage;
+        var isHero = enemy is Hero;
+
+        if (willKill)
+        {
+            if (isHero)
+                EnemyHeroDeaths++;
+            else
+                EnemyUnitDeaths++;
+        }
+
+        EnemyHealth -= damage;
+        return this;
     }
 
     public override string ToString() => $"MyHeroDeaths:{MyHeroDeaths} MyHealth:{MyHealth} MyDamage:{MyDamage} EnemyHeroDeaths:{EnemyHeroDeaths} EnemyUnitDeaths:{EnemyUnitDeaths}  EnemyHealth:{EnemyHealth} MyGoldEarned:{MyGoldEarned}";
@@ -481,6 +490,8 @@ public class GetIdeasParameters
         EnemiesInRange = state.Common.Enemies.Where(x => x.Distance(Hero) <= Hero.AttackRange).ToList();
         InEnemiesRange = state.Common.Enemies.Where(x => x.Distance(Hero) <= x.AttackRange).ToList();
         Threat = InEnemiesRange.Sum(x => x.AttackDamage);
+
+        if (state.Common.EnemyTower.Distance(Hero) <= Consts.TOWER_RANGE) Threat+= Consts.TOWER_DAMAGE;
     }
 }
 
@@ -511,13 +522,12 @@ public class AttackEnemiesInRange : MoveIdeaMaker
 
         var target = byHealth.FirstOrDefault(x => x.WillKill) ?? byHealth.FirstOrDefault();
 
-        var score = target.WillKill
-            ? IdeaResult.EnemyKill(target.Entity, p.Threat)
-            : IdeaResult.Attack(p.Hero, target.Entity, p.Threat);
+        var score = IdeaResult.ForHeroPosition(p.Hero, p.Threat)
+            .AttackEnemy(target.Entity, p.Hero);
 
         result.Add(
             new MoveIdea(Actions.Attack(target.Entity),
-                $"Attack Enemy In Range {target.Entity.UnitId} {target.Entity.UnitType} (Kill? {target.WillKill})",
+                $"Attack {target.Entity.UnitType} In Range {target.Entity.UnitId}",
                 score));
     }
 }
@@ -525,32 +535,36 @@ public class AttackEnemiesInRange : MoveIdeaMaker
 public class StayBehindFrontLine : MoveIdeaMaker
 {
     private readonly int _distanceFromFront;
+    private readonly int _lineStrength;
 
-    public StayBehindFrontLine(int distanceFromFront = 50)
+    public StayBehindFrontLine(int distanceFromFront = 50, int lineStrength = 3)
     {
         _distanceFromFront = distanceFromFront;
+        _lineStrength = lineStrength;
     }
 
     protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
     {
-        var frontLine = p.State.Common.MyFrontLine;
+        var unitCount = p.State.Common.MyUnits.Count();
+
+        if (unitCount <= _lineStrength)
+        {
+            // Line Folded, RTB
+            result.Add(
+                new MoveIdea(Actions.Move(p.State.Common.MyTower),
+                    $"Line Folded (<= {_lineStrength}) - RTB",
+                    IdeaResult.HeroDeath(p.Hero)));
+            return;
+        }
+
+        var frontLine = (int)p.State.Common.MyUnits.Average(x => x.X);
         var shifted = p.State.Common.ShiftX(frontLine, -_distanceFromFront);
         var ideaResult = IdeaResult.ForHeroPosition(p.Hero, p.Threat);
 
-        if (p.State.Common.ForwardOfFrontLine(p.Hero.X))
-        {
-            result.Add(
-                new MoveIdea(Actions.Move(shifted, p.State.Common.MyTower.Y),
-                    $"Move Back to Front Line {shifted},{p.State.Common.MyTower.Y}",
-                    ideaResult));
-        }
-        else
-        {
-            result.Add(
-                new MoveIdea(Actions.Move(shifted, p.State.Common.MyTower.Y),
-                    $"Move Forward to Front Line {shifted},{p.State.Common.MyTower.Y}",
-                    ideaResult));
-        }
+        result.Add(
+            new MoveIdea(Actions.Move(shifted, p.State.Common.MyTower.Y),
+                $"Move Front Line {shifted},{p.State.Common.MyTower.Y}",
+                ideaResult));
     }
 }
 
@@ -586,12 +600,13 @@ public class EscapePullOrSpearflip : MoveIdeaMaker
         var escapeAction = (canBlink)
             ? blink.Move(p.Hero, p.State, coord)
             : Actions.Move(coord);
+        var score = IdeaResult.ForHeroPosition(p.Hero, p.Threat);
         Action onExecuted = canBlink ? new Action(() => blink.Used(p.State)) : new Action(() => { });
 
         result.Add(
             new MoveIdea(escapeAction,
                 $"Pulled Into Enemy Lines - Escape!",
-                IdeaResult.HeroDeath(p.Hero),
+                score,
                 onExecuted));
     }
 }
@@ -674,7 +689,7 @@ public class ThrowFireball : MoveIdeaMaker
             result.Add(
                 new MoveIdea(fireballAction,
                     $"Throw Fireball @ {unitInRange.UnitType} #{unitInRange.UnitId} for {damage} Damage",
-                     IdeaResult.HitEnemy(unitInRange, damage),
+                     IdeaResult.ForHeroPosition(p.Hero, p.Threat).AttackEnemy(unitInRange, damage),
                      () => fireball.Used(p.State)));
         }
     }
@@ -1043,7 +1058,7 @@ public class HulkJungler : HeroBot
 
         var grootTargets = state.Common.Groots
             .Where(x => state.Common.BehindFrontLine(x.X))
-            .Where(x => x.Distance(state.Common.EnemyTower) > 400) /* Tower Attack Range */
+            .Where(x => x.Distance(state.Common.EnemyTower) > Consts.TOWER_RANGE)
             .OrderBy(x => x.Distance(me))
             .ToList();
 
@@ -1083,7 +1098,7 @@ public class HulkJungler : HeroBot
 
         // Let's Also Smash Some Enemy Units for LOLs
         var nearestEnemy = state.Common.EnemyUnits
-            .Where(x => x.Distance(state.Common.EnemyTower) >= 400)
+            .Where(x => x.Distance(state.Common.EnemyTower) >= Consts.TOWER_RANGE)
             .OrderBy(x => x.Distance(me))
             .ThenBy(x => x.Health)
             .FirstOrDefault();
@@ -1515,6 +1530,8 @@ public static class Consts
     public const int WIDTH = 1920;
     public const int HEIGHT = 750;
     public const int SAFETY_DIST = 5;
+    public const int TOWER_RANGE = 400;
+    public const int TOWER_DAMAGE = 100;
 }
 
 #endregion
