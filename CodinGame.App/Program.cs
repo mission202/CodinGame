@@ -49,6 +49,7 @@ public class IdeaResult
     public int EnemyUnitDeaths { get; private set; }
     public int EnemyHealth { get; private set; }
     public int MyGoldEarned { get; private set; }
+    public int Items { get; private set; }
 
     public IdeaResult(
         int myHeroDeaths = 0,
@@ -57,7 +58,8 @@ public class IdeaResult
         int enemyHeroDeaths = 0,
         int enemyUnitDeaths = 0,
         int enemyHealth = 0,
-        int myGoldEarned = 0)
+        int myGoldEarned = 0,
+        int items = 0)
     {
         MyHeroDeaths = myHeroDeaths;
         MyHealth = myHealth;
@@ -104,6 +106,16 @@ public class IdeaResult
             myDamage: willDie ? -hero.AttackDamage : 0);
     }
 
+    public static IdeaResult ForItem(Item item)
+    {
+        return new IdeaResult
+        {
+            MyHealth = item.Health,
+            MyDamage = item.Damage,
+            Items = 1
+        };
+    }
+
     public override string ToString() => $"MyHeroDeaths:{MyHeroDeaths} MyHealth:{MyHealth} MyDamage:{MyDamage} EnemyHeroDeaths:{EnemyHeroDeaths} EnemyUnitDeaths:{EnemyUnitDeaths}  EnemyHealth:{EnemyHealth} MyGoldEarned:{MyGoldEarned}";
 }
 
@@ -116,7 +128,7 @@ public class GameState
     public int RoundType { get; private set; }
     public bool IsHeroPickRound => RoundType < 0;
 
-    public int PlayerGold { get; private set; }
+    public int PlayerGold { get; set; }
     public int EnemyGold { get; private set; }
     public List<Entity> Entities { get; } = new List<Entity>();
     public List<Item> Items { get; } = new List<Item>();
@@ -350,8 +362,8 @@ public class Game
 
         var heroes = new List<HeroBot>()
         {
-            new DrStrangeSupport(),
             new IronmanCarry(),
+            new DrStrangeSupport(),
         };
         _gs.SetHeroes(heroes);
         _brain = new AI(heroes);
@@ -726,6 +738,78 @@ public class ThrowFireball : MoveIdeaMaker
     }
 }
 
+public class GoShopping : MoveIdeaMaker
+{
+    private readonly Priority[] _priorities;
+    private readonly Priority _p1;
+    private readonly Priority _p2;
+    private readonly Priority _p3;
+
+    public enum Priority
+    {
+        Damage,
+        Mana,
+        Movement
+    }
+
+    public GoShopping(Priority p1 = Priority.Damage, Priority p2 = Priority.Movement, Priority p3 = Priority.Mana)
+    {
+        _priorities = new[] { p1, p2, p3 };
+    }
+
+    protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
+    {
+        if (p.HeroBot.Carrying >= Consts.MAX_ITEMS) return;
+
+        var affordable = p.State.Items
+            .Where(x => !x.IsInstant)
+            .Affordable(p.State.PlayerGold);
+
+        for (int i = 0; i < _priorities.Length; i++)
+            affordable = OrderByPriority(affordable, _priorities[i]);
+
+        D.WL("Prioritised Items for Shopping:");
+        affordable.ToList().ForEach(x => D.WL($" - {x.ToString()}"));
+
+        var interesting = affordable.FirstOrDefault();
+
+        if (interesting == null) return;
+
+        result.Add(
+            new MoveIdea(Actions.Buy(interesting),
+                $"{interesting.Name} DPG: {interesting.DamagePerGold} MRPG: {interesting.ManaRegenPerGold} MSPG: {interesting.MoveSpeedPerGold}",
+                IdeaResult.ForItem(interesting),
+                () =>
+                {
+                    p.HeroBot.Carrying++;
+                    p.State.PlayerGold -= interesting.Cost;
+                }));
+    }
+
+    private IOrderedEnumerable<Item> OrderByPriority(IEnumerable<Item> items, Priority p)
+    {
+        var ordered = items as IOrderedEnumerable<Item>;
+
+        switch (p)
+        {
+            case Priority.Damage:
+                return ordered == null
+                    ? items.OrderByDescending(x => x.DamagePerGold)
+                    : ordered.ThenByDescending(x => x.DamagePerGold);
+            case Priority.Mana:
+                return ordered == null
+                    ? items.OrderByDescending(x => x.ManaRegenPerGold)
+                    : ordered.ThenByDescending(x => x.ManaRegenPerGold);
+            case Priority.Movement:
+                return ordered == null
+                    ? items.OrderByDescending(x => x.MoveSpeedPerGold)
+                    : ordered.ThenByDescending(x => x.MoveSpeedPerGold);
+            default:
+                return items.OrderByDescending(x => x.Cost);
+        }
+    }
+}
+
 #endregion
 
 #region Domain Objects
@@ -906,12 +990,15 @@ public class Item
     public bool BoostsSpeed => Name.Contains("Boots");
     public int Cost { get; private set; }
     public int Damage { get; private set; }
+    public float DamagePerGold => Damage / Cost;
     public int Health { get; private set; }
     public int MaxHealth { get; private set; }
     public int Mana { get; private set; }
     public int MaxMana { get; private set; }
     public int MoveSpeed { get; private set; }
+    public float MoveSpeedPerGold => MoveSpeed / Cost;
     public int ManaRegeneration { get; private set; }
+    public float ManaRegenPerGold => ManaRegeneration / Cost;
     public int IsPotion { get; private set; }
     public bool IsInstant => IsPotion != 0;
 
@@ -930,7 +1017,7 @@ public class Item
         IsPotion = int.Parse(inputs[9]); // 0 if it's not instantly consumed
     }
 
-    public override string ToString() => $"{Name} {Cost}g DMG:{Damage} H:{Health} MH:{MaxHealth} M:{Mana} MM:{MaxMana} MR:{ManaRegeneration} MV:{MoveSpeed} Potion? {IsPotion} Instant? {IsInstant}";
+    public override string ToString() => $"{Name} {Cost}g DMG:{Damage} ({DamagePerGold}) H:{Health} MH:{MaxHealth} M:{Mana} MM:{MaxMana} MR:{ManaRegeneration} ({ManaRegenPerGold}) MV:{MoveSpeed} ({MoveSpeedPerGold}) Potion? {IsPotion} Instant? {IsInstant}";
 }
 
 public class HulkJungler : HeroBot
@@ -1095,6 +1182,7 @@ public class IronmanCarry : HeroBot
         Moves.Add(new StayBehindFrontLine(distanceFromFront: 50));
         Moves.Add(new ThrowFireball());
         Moves.Add(new EscapePullOrSpearflip());
+        Moves.Add(new GoShopping());
     }
 
     protected override List<MoveIdea> GetIdeas(Hero me, GameState state)
@@ -1144,27 +1232,6 @@ public class IronmanCarry : HeroBot
             }
         }
 
-        // ==== Shop for Items to POWER UP! ====
-
-        if (Carrying < Consts.MAX_ITEMS)
-        {
-            var interesting = state.Items
-                .Where(x => !x.Name.Contains("Bronze"))
-                .Affordable(state.PlayerGold)
-                .Where(x => x.BoostsDamage)
-                .OrderBy(x => x.Damage / x.Cost)
-                .FirstOrDefault();
-
-            if (interesting != null)
-            {
-                result.Add(
-                    new MoveIdea(Actions.Buy(interesting),
-                        $"{interesting.Name} Boosts Damage to {interesting.Damage}",
-                        new IdeaResult(myDamage: interesting.Damage),
-                        () => Carrying++));
-            }
-        }
-
         return result;
     }
 
@@ -1172,6 +1239,7 @@ public class IronmanCarry : HeroBot
     {
         return ideas
             .OrderByDescending(x => x.Result.MyHeroDeaths)
+            .OrderByDescending(x => x.Result.Items)
             .ThenByDescending(x => x.Result.MyDamage)
             .ThenByDescending(x => x.Result.EnemyHeroDeaths)
             .ThenByDescending(x => x.Result.EnemyUnitDeaths)
@@ -1192,6 +1260,7 @@ public class DrStrangeSupport : HeroBot
 
         Moves.Add(new StayBehindFrontLine());
         Moves.Add(new EscapePullOrSpearflip());
+        Moves.Add(new GoShopping(p1: GoShopping.Priority.Mana, p2: GoShopping.Priority.Damage, p3: GoShopping.Priority.Movement));
     }
 
     protected override List<MoveIdea> GetIdeas(Hero me, GameState state)
@@ -1271,27 +1340,6 @@ public class DrStrangeSupport : HeroBot
                     IdeaResult.NoChange));
         }
 
-        // ==== Shop for Items to POWER UP! ====
-
-        if (Carrying < Consts.MAX_ITEMS)
-        {
-            var interesting = state.Items
-                .Where(x => !x.Name.Contains("Bronze"))
-                .Affordable(state.PlayerGold)
-                .Where(x => x.BoostsDamage)
-                .OrderBy(x => x.Damage / x.Cost)
-                .FirstOrDefault();
-
-            if (interesting != null)
-            {
-                result.Add(
-                    new MoveIdea(Actions.Buy(interesting),
-                        $"{interesting.Name} Boosts Damage to {interesting.Damage}",
-                        new IdeaResult(myDamage: interesting.Damage),
-                        () => Carrying++));
-            }
-        }
-
         // TODO: Add Skills - Pull, Shield, AoEHeal
 
         return result;
@@ -1301,6 +1349,7 @@ public class DrStrangeSupport : HeroBot
     {
         return ideas
             .OrderByDescending(x => x.Result.MyHeroDeaths)
+            .ThenByDescending(x => x.Result.Items)
             .ThenByDescending(x => x.Result.MyHealth)
             .ThenByDescending(x => x.Result.MyDamage)
             .ThenByDescending(x => x.Result.EnemyHeroDeaths)
@@ -1315,7 +1364,7 @@ public abstract class HeroBot
 {
     public string Name { get; private set; }
     public int Range { get; private set; }
-    public int Carrying { get; protected set; }
+    public int Carrying { get; set; }
 
     public List<SkillMove> Skills { get; private set; } = new List<SkillMove>();
     protected List<MoveIdeaMaker> Moves { get; private set; } = new List<MoveIdeaMaker>();
