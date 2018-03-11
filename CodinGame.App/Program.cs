@@ -630,12 +630,16 @@ public class StayBehindFrontLine : MoveIdeaMaker
         var maxForward = p.State.Common.ShiftX(shifted, _maxForwardOfFront);
         if (p.State.Common.ForwardOf(p.Hero.Coordinate.X, maxForward))
         {
-            result.Add(
-                new MoveIdea(Actions.Move(p.State.Common.MyTower),
-                    $"Drifted Beyond Max Forward of Front - {_maxForwardOfFront}. Return to Line",
-                    IdeaResult.HeroDeath(p.Hero)));
+            var tower = p.State.Common.MyTower.Coordinate;
+            if (p.Hero.Coordinate != tower)
+            {
+                result.Add(
+                    new MoveIdea(Actions.Move(tower),
+                        $"Drifted Beyond Max Forward of Front - {_maxForwardOfFront}. Return to Line",
+                        IdeaResult.HeroDeath(p.Hero)));
 
-            return;
+                return;
+            }
         }
 
         var ideaResult = IdeaResult.ForHeroPosition(p.Hero, p.Threat);
