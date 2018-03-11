@@ -621,10 +621,13 @@ public class StayBehindFrontLine : MoveIdeaMaker
         var frontLine = (int)p.State.Common.MyUnits.Average(x => x.X);
         var shifted = p.State.Common.ShiftX(frontLine, -_distanceFromFront);
         var ideaResult = IdeaResult.ForHeroPosition(p.Hero, p.Threat);
+        var coord = new Coordinate(shifted, p.State.Common.MyTower.Y);
+
+        if (p.Hero.Coordinate == coord) return;
 
         result.Add(
-            new MoveIdea(Actions.Move(shifted, p.State.Common.MyTower.Y),
-                $"Move Front Line {shifted},{p.State.Common.MyTower.Y}",
+            new MoveIdea(Actions.Move(coord),
+                $"Move to Front Line {coord.ToString()}",
                 ideaResult));
     }
 }
@@ -759,9 +762,7 @@ public class ThrowFireball : MoveIdeaMaker
 public class GoShopping : MoveIdeaMaker
 {
     private readonly Priority[] _priorities;
-    private readonly Priority _p1;
-    private readonly Priority _p2;
-    private readonly Priority _p3;
+    private readonly int _maxSlots;
 
     public enum Priority
     {
@@ -770,14 +771,19 @@ public class GoShopping : MoveIdeaMaker
         Movement
     }
 
-    public GoShopping(Priority p1 = Priority.Damage, Priority p2 = Priority.Movement, Priority p3 = Priority.Mana)
+    public GoShopping(Priority p1 = Priority.Damage, Priority p2 = Priority.Movement, Priority p3 = Priority.Mana, int maxSlots = Consts.MAX_ITEMS, bool debug = false) : base(debug)
     {
         _priorities = new[] { p1, p2, p3 };
+        _maxSlots = maxSlots;
     }
 
     protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
     {
-        if (p.HeroBot.Carrying >= Consts.MAX_ITEMS) return;
+        if (p.HeroBot.Carrying >= _maxSlots)
+        {
+            D.WL($"{p.HeroBot.Name} Can't Shop - Out of Allowed Slots ({_maxSlots})", Debug);
+            return;
+        }
 
         var affordable = p.State.Items
             .Where(x => !x.IsInstant)
@@ -788,8 +794,8 @@ public class GoShopping : MoveIdeaMaker
         for (int i = 0; i < _priorities.Length; i++)
             affordable = OrderByPriority(affordable, _priorities[i]);
 
-        D.WL("Prioritised Items for Shopping:");
-        affordable.ToList().ForEach(x => D.WL($" - {x.ToString()}"));
+        D.WL("Prioritised Items for Shopping:", Debug);
+        affordable.ToList().ForEach(x => D.WL($" - {x.ToString()}", Debug));
 
         var interesting = affordable.FirstOrDefault();
 
@@ -814,7 +820,7 @@ public class GoShopping : MoveIdeaMaker
         {
             case Priority.Damage:
                 return ordered == null
-                    ? items.OrderByDescending(x => x.DamagePerGold)
+                    ? items.Where(x => x.BoostsDamage).OrderByDescending(x => x.DamagePerGold)
                     : ordered.ThenByDescending(x => x.DamagePerGold);
             case Priority.Mana:
                 return ordered == null
@@ -822,7 +828,7 @@ public class GoShopping : MoveIdeaMaker
                     : ordered.ThenByDescending(x => x.ManaRegenPerGold);
             case Priority.Movement:
                 return ordered == null
-                    ? items.OrderByDescending(x => x.MoveSpeedPerGold)
+                    ? items.Where(x => x.BoostsSpeed).OrderByDescending(x => x.MoveSpeedPerGold)
                     : ordered.ThenByDescending(x => x.MoveSpeedPerGold);
             default:
                 return items.OrderByDescending(x => x.Cost);
@@ -1182,15 +1188,15 @@ public class Item
     public bool BoostsSpeed => Name.Contains("Boots");
     public int Cost { get; private set; }
     public int Damage { get; private set; }
-    public float DamagePerGold => Damage / Cost;
+    public float DamagePerGold => Damage <= 0 ? 0 : Cost / Damage;
     public int Health { get; private set; }
     public int MaxHealth { get; private set; }
     public int Mana { get; private set; }
     public int MaxMana { get; private set; }
     public int MoveSpeed { get; private set; }
-    public float MoveSpeedPerGold => MoveSpeed / Cost;
+    public float MoveSpeedPerGold => MoveSpeed <= 0 ? 0 : Cost / MoveSpeed;
     public int ManaRegeneration { get; private set; }
-    public float ManaRegenPerGold => ManaRegeneration / Cost;
+    public float ManaRegenPerGold => ManaRegeneration <= 0 ? 0 : Cost / ManaRegeneration;
     public int IsPotion { get; private set; }
     public bool IsInstant => IsPotion != 0;
 
@@ -1376,7 +1382,7 @@ public class IronmanCarry : HeroBot
         Moves.Add(new ThrowFireball());
         Moves.Add(new BurnEnemyFrontLine());
         Moves.Add(new EscapePullOrSpearflip());
-        Moves.Add(new GoShopping());
+        Moves.Add(new GoShopping(maxSlots: Consts.MAX_ITEMS - 1, debug: true));
     }
 
     protected override List<MoveIdea> GetIdeas(Hero me, GameState state)
@@ -1460,7 +1466,11 @@ public class DrStrangeSupport : HeroBot
         Moves.Add(new PullEnemies());
         Moves.Add(new ShieldHeroes(selfish: false));
         Moves.Add(new AoEHeal(minGroupSize: 2, minHealAmount: 50));
-        Moves.Add(new GoShopping(p1: GoShopping.Priority.Mana, p2: GoShopping.Priority.Damage, p3: GoShopping.Priority.Movement));
+        Moves.Add(new GoShopping(
+            p1: GoShopping.Priority.Mana,
+            p2: GoShopping.Priority.Damage,
+            p3: GoShopping.Priority.Movement,
+            maxSlots: 2));
     }
 
     protected override List<MoveIdea> GetIdeas(Hero me, GameState state)
