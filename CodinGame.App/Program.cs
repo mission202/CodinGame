@@ -95,6 +95,15 @@ public class IdeaResult
             enemyHealth: -damage);
     }
 
+    public static IdeaResult ForHeroPosition(Hero hero, int threat)
+    {
+        var willDie = hero.Health <= threat;
+        return new IdeaResult(
+            myHeroDeaths: willDie ? 1 : 0,
+            myHealth: -threat,
+            myDamage: willDie ? -hero.AttackDamage : 0);
+    }
+
     public override string ToString() => $"MyHeroDeaths:{MyHeroDeaths} MyHealth:{MyHealth} MyDamage:{MyDamage} EnemyHeroDeaths:{EnemyHeroDeaths} EnemyUnitDeaths:{EnemyUnitDeaths}  EnemyHealth:{EnemyHealth} MyGoldEarned:{MyGoldEarned}";
 }
 
@@ -168,7 +177,6 @@ public class GameState
     public void Turn()
     {
         TurnNumber++;
-        D.WL($"Turn Number: #{TurnNumber}");
 
         _turn.Clear();
         Entities.Clear(); // TODO: Yuck, can't I just update?
@@ -539,6 +547,145 @@ public class PullSkill : UnitTargetedSkillMove
 }
 #endregion
 
+#region MoveIdea Makers
+public class GetIdeasParameters
+{
+    public HeroBot HeroBot { get; private set; }
+    public Hero Hero { get; private set; }
+    public GameState State { get; private set; }
+    public List<Entity> EnemiesInRange { get; private set; }
+    public List<Entity> InEnemiesRange { get; private set; }
+    public int Threat { get; private set; }
+
+    public GetIdeasParameters(HeroBot bot, GameState state)
+    {
+        HeroBot = bot;
+        Hero = state.Common.MyHeroes.Where(x => x.Attribs.HeroType == HeroBot.Name).Single();
+        State = state;
+        EnemiesInRange = state.Common.Enemies.Where(x => x.Distance(Hero) <= Hero.AttackRange).ToList();
+        InEnemiesRange = state.Common.Enemies.Where(x => x.Distance(Hero) <= x.AttackRange).ToList();
+        Threat = InEnemiesRange.Sum(x => x.AttackDamage);
+    }
+}
+
+public abstract class MoveIdeaMaker
+{
+    protected abstract void AddIdeas(GetIdeasParameters p, List<MoveIdea> result);
+
+    public List<MoveIdea> GetIdeas(GetIdeasParameters @params)
+    {
+        // Kinda ugly, but we end up creating lists everywhere just for "return ..."
+        var result = new List<MoveIdea>();
+        AddIdeas(@params, result);
+        return result;
+    }
+}
+
+public class AttackEnemiesInRange : MoveIdeaMaker
+{
+    protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
+    {
+        if (p.EnemiesInRange.Any())
+        {
+            var byHealth = p.EnemiesInRange
+                .OrderByDescending(x => x.UnitType) /* UNITs Before Heroes to Avoid Aggro */
+                .ThenBy(x => x.Health)
+                .Select(x => new { Entity = x, WillKill = x.Health <= p.Hero.AttackDamage })
+                .ToList();
+
+            var target = byHealth.FirstOrDefault(x => x.WillKill) ?? byHealth.FirstOrDefault();
+
+            var score = target.WillKill
+                ? IdeaResult.EnemyKill(target.Entity, p.Threat)
+                : IdeaResult.Attack(p.Hero, target.Entity, p.Threat);
+
+            result.Add(
+                new MoveIdea(Actions.Attack(target.Entity),
+                    $"Attack Enemy In Range {target.Entity.UnitId} {target.Entity.UnitType} (Kill? {target.WillKill})",
+                    score));
+        }
+    }
+}
+
+public class StayBehindFrontLine : MoveIdeaMaker
+{
+    private readonly int _distanceFromFront;
+
+    public StayBehindFrontLine(int distanceFromFront = 50)
+    {
+        _distanceFromFront = distanceFromFront;
+    }
+
+    protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
+    {
+        var frontLine = p.State.Common.MyFrontLine;
+        var shifted = p.State.Common.ShiftX(frontLine, -_distanceFromFront);
+        var ideaResult = IdeaResult.ForHeroPosition(p.Hero, p.Threat);
+
+        if (p.State.Common.ForwardOfFrontLine(p.Hero.X))
+        {
+            result.Add(
+                new MoveIdea(Actions.Move(shifted, p.State.Common.MyTower.Y),
+                    $"Move Back to Front Line {shifted},{p.State.Common.MyTower.Y}",
+                    ideaResult));
+        }
+        else
+        {
+            result.Add(
+                new MoveIdea(Actions.Move(shifted, p.State.Common.MyTower.Y),
+                    $"Move Forward to Front Line {shifted},{p.State.Common.MyTower.Y}",
+                    ideaResult));
+        }
+    }
+}
+
+public class ThrowFireball : MoveIdeaMaker
+{
+    private readonly int _minRange;
+    private readonly int _maxRange;
+
+    public ThrowFireball(int minRange = 300, int maxRange = 1000)
+    {
+        _minRange = minRange;
+        _maxRange = maxRange;
+    }
+
+    protected override void AddIdeas(GetIdeasParameters p, List<MoveIdea> result)
+    {
+        var fireball = p.HeroBot.Skills.OfType<FireballSkill>().SingleOrDefault();
+        if (fireball == null) return;
+
+        if (fireball.CanUse(p.Hero, p.State))
+        {
+            /*  • range: 900
+                • flytime: 0.9
+                • impact radius: 50
+                • Damage: current mana * 0.2 + 55 * distance traveled / 1000
+            */
+
+            var unitInRange = p.State.Common.EnemyUnits
+                .Where(x => x.Distance(p.Hero) >= _minRange) // Only Fire at Range for DMG
+                .Where(x => x.Distance(p.Hero) <= _maxRange)
+                .FirstOrDefault();
+
+            if (unitInRange != null)
+            {
+                var fireballAction = fireball
+                    .Move(p.Hero, p.State, unitInRange.Coordinate)
+                    .WithMessage("HADOUKEN!");
+                var damage = (int)(p.Hero.Attribs.Mana * 0.2 + 55 * p.Hero.Distance(unitInRange) / 1000);
+                result.Add(
+                    new MoveIdea(fireballAction,
+                        $"Throw Fireball @ {unitInRange.UnitType} #{unitInRange.UnitId} for {damage} Damage",
+                         IdeaResult.HitEnemy(unitInRange, damage),
+                         () => fireball.Used(p.State)));
+            }
+        }
+    }
+}
+
+#endregion
+
 #region Domain Objects
 
 public abstract class StrategicMove
@@ -896,6 +1043,10 @@ public class IronmanCarry : HeroBot
         Skills.Add(new FireballSkill());
         Skills.Add(new BurningSkill());
         Skills.Add(new BlinkSkill());
+
+        Moves.Add(new AttackEnemiesInRange());
+        Moves.Add(new StayBehindFrontLine(distanceFromFront: 50));
+        Moves.Add(new ThrowFireball());
     }
 
     protected override List<MoveIdea> GetIdeas(Hero me, GameState state)
@@ -945,36 +1096,6 @@ public class IronmanCarry : HeroBot
             }
         }
 
-        if (enemiesInRange.Any())
-        {
-            var byHealth = enemiesInRange
-                .OrderByDescending(x => x.UnitType) /* UNITs Before Heroes to Avoid Aggro */
-                .ThenBy(x => x.Health)
-                .Select(x => new { Entity = x, WillKill = x.Health <= me.AttackDamage })
-                .ToList();
-
-            var target = byHealth.FirstOrDefault(x => x.WillKill) ?? byHealth.FirstOrDefault();
-
-            var score = target.WillKill
-                ? IdeaResult.EnemyKill(target.Entity, threat)
-                : IdeaResult.Attack(me, target.Entity, threat);
-
-            result.Add(
-                new MoveIdea(Actions.Attack(target.Entity),
-                    $"Attack Enemy In Range {target.Entity.UnitId} {target.Entity.UnitType} (Kill? {target.WillKill})",
-                    score));
-        }
-        else
-        {
-            // Move to Front Line
-            var frontLine = state.Common.MyFrontLine;
-            var shifted = state.Common.ShiftX(frontLine, -50);
-            result.Add(
-                new MoveIdea(Actions.Move(shifted, state.Common.MyTower.Y),
-                    $"Move to Front Line {shifted},{state.Common.MyTower.Y}",
-                    IdeaResult.NoChange));
-        }
-
         if (state.Common.ForwardOfFrontLine(me.X))
         {
             // Spearflipped or Pulled into Enemy Lines - Get Out (Head Away from Lane)
@@ -1012,36 +1133,6 @@ public class IronmanCarry : HeroBot
                         $"{interesting.Name} Boosts Damage to {interesting.Damage}",
                         new IdeaResult(myDamage: interesting.Damage),
                         () => Carrying++));
-            }
-        }
-
-        // TODO: Hack - Need to make cooldown tracker nicer for "Idea" model.
-        var fireball = Skills.OfType<FireballSkill>().Single();
-        if (fireball.CanUse(me, state))
-        {
-            // TODO: Make Damage Calculation and Targeting Smarter
-            /*  • range: 900
-                • flytime: 0.9
-                • impact radius: 50
-                Damage: current mana * 0.2 + 55 * distance traveled / 1000
-            */
-
-            var unitInRange = state.Common.EnemyUnits
-                .Where(x => x.Distance(me) >= 300) // Only Fire at Range for DMG
-                .Where(x => x.Distance(me) <= 1000)
-                .FirstOrDefault();
-
-            if (unitInRange != null)
-            {
-                var fireballAction = fireball.Move(me, state, unitInRange.Coordinate)
-                    .WithMessage("HADOUKEN!");
-                var damage = (int)(me.Attribs.Mana * 0.2 + 55 * me.Distance(unitInRange) / 1000);
-                var willKill = damage >= unitInRange.Health;
-                result.Add(
-                    new MoveIdea(fireballAction,
-                        $"Throw Fireball @ {unitInRange.UnitType} #{unitInRange.UnitId} for {damage} Damage",
-                         IdeaResult.HitEnemy(unitInRange, damage),
-                         () => fireball.Used(state)));
             }
         }
 
@@ -1194,19 +1285,24 @@ public abstract class HeroBot
     public int Range { get; private set; }
     public int Carrying { get; protected set; }
 
-    protected List<SkillMove> Skills { get; private set; }
+    public List<SkillMove> Skills { get; private set; } = new List<SkillMove>();
+    protected List<MoveIdeaMaker> Moves { get; private set; } = new List<MoveIdeaMaker>();
 
     public HeroBot(string name, int range)
     {
         Name = name;
         Range = range;
-        Skills = new List<SkillMove>();
     }
 
     public List<MoveIdea> GetIdeas(GameState state)
     {
-        var me = state.Common.MyHeroes.Where(x => x.Attribs.HeroType == Name).Single();
-        return GetIdeas(me, state);
+        var @params = new GetIdeasParameters(this, state);
+
+        // Get Ideas from Registered Moves AND Inline Methods
+        var ideas = new List<MoveIdea>();
+        ideas.AddRange(Moves.SelectMany(x => x.GetIdeas(@params)));
+        ideas.AddRange(GetIdeas(@params.Hero, state));
+        return ideas;
     }
 
     protected abstract List<MoveIdea> GetIdeas(Hero hero, GameState state);
