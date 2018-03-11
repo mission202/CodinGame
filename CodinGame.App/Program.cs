@@ -342,7 +342,7 @@ public class Game
 
         var heroes = new List<HeroBot>()
         {
-            new HulkJungler(),
+            new DrStrangeSupport(),
             new IronmanCarry(),
         };
         _gs.SetHeroes(heroes);
@@ -611,13 +611,7 @@ public abstract class SkillMove : StrategicMove
             return false;
         }
 
-        D.WL($"Checking Cooldown of {SkillName}:");
-        D.WL($" - _availableOnTurn: {_availableOnTurn}");
-        D.WL($" - state.TurnNumber: {state.TurnNumber}");
-        D.WL($" - Math.Max(0, _availableOnTurn - state.TurnNumber): {Math.Max(0, _availableOnTurn - state.TurnNumber)}");
-
         var cooldownRemaining = Math.Max(0, _availableOnTurn - state.TurnNumber);
-
         if (cooldownRemaining > 0)
         {
             D.WL($"Can't Use {SkillName}, Cooldown at {cooldownRemaining}");
@@ -1050,6 +1044,137 @@ public class IronmanCarry : HeroBot
                          () => fireball.Used(state)));
             }
         }
+
+        return result
+            .OrderByDescending(x => x.Result.MyHeroDeaths)
+            .ThenByDescending(x => x.Result.MyHealth)
+            .ThenByDescending(x => x.Result.MyDamage)
+            .ThenByDescending(x => x.Result.EnemyHeroDeaths)
+            .ThenByDescending(x => x.Result.EnemyUnitDeaths)
+            .ThenBy(x => x.Result.EnemyHealth)
+            .ThenByDescending(x => x.Result.MyGoldEarned)
+            .ToList();
+    }
+}
+
+public class DrStrangeSupport : HeroBot
+{
+
+    public DrStrangeSupport() : base("DOCTOR_STRANGE", 245)
+    {
+        Skills.Add(new AoEHealSkill());
+        Skills.Add(new ShieldSkill());
+        Skills.Add(new PullSkill());
+    }
+
+    protected override List<MoveIdea> GetIdeas(Hero me, GameState state)
+    {
+        // Find Bush Closest to Front, Hide in it. Kill enemies in range/spells
+        var result = new List<MoveIdea>();
+
+        // Check for Enemies in Range
+        var enemiesInRange = state.Common.Enemies.Where(x => x.Distance(me) <= me.AttackRange).ToList();
+        var inEnemiesRange = state.Common.Enemies.Where(x => x.Distance(me) <= x.AttackRange).ToList();
+        var threat = inEnemiesRange.Sum(x => x.AttackDamage);
+
+        if (me.Health <= threat + 50)
+        {
+            var bushAtTower = state.Bushes
+                .OrderBy(x => state.Common.MyTower.Distance(x))
+                .First();
+
+            bool alreadyThere = me.X == bushAtTower.X && me.Y == bushAtTower.Y;
+            var runCmd = alreadyThere
+                ? Actions.Wait
+                : Actions.Move(bushAtTower);
+
+            var runResult = alreadyThere
+                ? new IdeaResult()
+                : IdeaResult.HeroDeath(me);
+
+            result.Add(new MoveIdea(
+                    runCmd,
+                    $"Risk of Death (Threat @ {threat}) - Hide!",
+                    runResult));
+
+            // Can We Buy A Potion?
+            var wtb = state.Items
+                .Where(x => x.IsInstant)
+                .Where(x => x.Health > 0)
+                .Affordable(state.PlayerGold)
+                .OrderBy(x => x.Health / x.Cost)
+                .FirstOrDefault();
+
+            if (wtb != null)
+            {
+                result.Add(new MoveIdea(
+                    Actions.Buy(wtb.Name),
+                    $"Health Dangerously Low ({me.Health}) - Heal!",
+                    new IdeaResult(myHeroDeaths: 1, myHealth: me.Health + wtb.Health)));
+            }
+        }
+
+        if (enemiesInRange.Any())
+        {
+            var byHealth = enemiesInRange
+                .OrderByDescending(x => x.UnitType) /* UNITs Before Heroes to Avoid Aggro */
+                .ThenBy(x => x.Health)
+                .Select(x => new { Entity = x, WillKill = x.Health <= me.AttackDamage })
+                .ToList();
+
+            var target = byHealth.FirstOrDefault(x => x.WillKill) ?? byHealth.FirstOrDefault();
+
+            var score = target.WillKill
+                ? IdeaResult.EnemyKill(target.Entity, threat)
+                : IdeaResult.Attack(me, target.Entity, threat);
+
+            result.Add(
+                new MoveIdea(Actions.Attack(target.Entity),
+                    $"Attack Enemy In Range {target.Entity.UnitId} {target.Entity.UnitType} (Kill? {target.WillKill})",
+                    score));
+        }
+        else
+        {
+            // Move to Front Line
+            var frontLine = state.Common.MyFrontLine;
+            var shifted = state.Common.ShiftX(frontLine, -50);
+            result.Add(
+                new MoveIdea(Actions.Move(shifted, state.Common.MyTower.Y),
+                    $"Move to Front Line {shifted},{state.Common.MyTower.Y}",
+                    IdeaResult.NoChange));
+        }
+
+        if (state.Common.ForwardOfFrontLine(me.X))
+        {
+            // Spearflipped or Pulled into Enemy Lines - Get Out (Head Away from Lane)
+            result.Add(
+                new MoveIdea(Actions.Move(state.Common.ShiftX(me.X, -100), 250),
+                    $"Pulled Into Enemy Lines - Escape!",
+                    IdeaResult.HeroDeath(me)));
+        }
+
+        // ==== Shop for Items to POWER UP! ====
+
+        if (Carrying < Consts.MAX_ITEMS)
+        {
+            var interesting = state.Items
+                .Where(x => !x.Name.Contains("Bronze"))
+                .Affordable(state.PlayerGold)
+                .Where(x => x.BoostsDamage)
+                .OrderBy(x => x.Damage / x.Cost)
+                .FirstOrDefault();
+
+            if (interesting != null)
+            {
+                result.Add(
+                    new MoveIdea(Actions.Buy(interesting),
+                        $"{interesting.Name} Boosts Damage to {interesting.Damage}",
+                        new IdeaResult(myDamage: interesting.Damage),
+                        () => Carrying++));
+            }
+        }
+
+        // TODO: Add Skills - Pull, Shield, AoEHeal
 
         return result
             .OrderByDescending(x => x.Result.MyHeroDeaths)
