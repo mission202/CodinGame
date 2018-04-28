@@ -3,59 +3,69 @@
  * the standard input according to the problem statement.
  **/
 
+ const CMD = {
+     wait: "WAIT",
+     build: (site, type) => `BUILD ${site.id} BARRACKS-${type}`,        // Will move if necessary.
+     train: (sites) => `TRAIN ${sites.map(x => x.id).join(' ')}`.trim() // List of ID's to train at
+ };
+
 const distance = (a, b) => {
     var x = a.x - b.x;
     var y = a.y - b.y;
-    return Math.sqrt(x * x + y * y);
+    return Math.round(Math.sqrt(x * x + y * y));
 };
+
+const addDistance = (site, unit) => { return { distance: distance({ x: unit.x, y: unit.y}, {x: site.x, y: site.y}), ...site }; };
+const isEmpty = site => site.structureType === -1;
+const friendly = site => site.owner === 0;
+const canTrain = site => friendly(site) && site.canBuild;
+const creepType = type => {
+    switch(type) {
+        case 0: return 'KNIGHT';
+        case 1: return 'ARCHER';
+        default: return 'NONE';
+    }
+}
 
 // HERE BE SITES!
 var numSites = parseInt(readline());
 
-const sites = Array(numSites).fill({}).map(() => {
+const sites = new Map();
+
+Array(numSites).fill({}).map(() => {
     var inputs = readline().split(' ');
-    return {
-        id: inputs[0],
+    sites.set(parseInt(inputs[0]), {
+        id: parseInt(inputs[0]),
         x: parseInt(inputs[1]),
         y: parseInt(inputs[2]),
         radius: parseInt(inputs[3])
-    };
+    });
 });
-
-printErr(JSON.stringify(sites));
 
 // game loop
 while (true) {
     var inputs = readline().split(' ');
-    var gold = parseInt(inputs[0]);
-    var touchedSite = parseInt(inputs[1]); // -1 if none
-    var siteBuildings = new Map();
+
+    const gs = {
+        gold: parseInt(inputs[0]),
+        touchedSite: parseInt(inputs[1]),   // -1 if none
+    }
+
     for (var i = 0; i < numSites; i++) {
         var inputs = readline().split(' ');
         var siteId = parseInt(inputs[0]);
-        var ignore1 = parseInt(inputs[1]); // used in future leagues
-        var ignore2 = parseInt(inputs[2]); // used in future leagues
-        var structureType = parseInt(inputs[3]); // -1 = No structure, 2 = Barracks
-        var owner = parseInt(inputs[4]); // -1 = No structure, 0 = Friendly, 1 = Enemy
-        var param1 = parseInt(inputs[5]);
-        var param2 = parseInt(inputs[6]);
-        siteBuildings.set(siteId, { structureType: parseInt(inputs[3]) });
+        let s = sites.get(siteId);
+
+        sites.set(siteId, {...s,
+            ignore1: parseInt(inputs[1]),           // used in future leagues
+            ignore2: parseInt(inputs[2]),           // used in future leagues
+            structureType: parseInt(inputs[3]),     // -1 = No structure, 2 = Barracks
+            owner: parseInt(inputs[4]),             // -1 = No structure, 0 = Friendly, 1 = Enemy
+            canBuild: parseInt(inputs[5]) === 0,    // -1 No Structure, != 0 Cooldown
+            type: creepType(parseInt(inputs[6]))    // -1 No Structure, 0 for KNIGHT, 1 for ARCHER
+        });
+        printErr(JSON.stringify(sites.get(siteId)));
     }
-
-    // QUEENIE ACTION
-    // First line: A valid queen action (WAIT, MOVE {x} {y}, BUILD {siteId} BARRACKS-{type})
-
-    // Hack - Just get to nearest empty site and build shit!
-    if (touchedSite != -1 && (siteBuildings.get(touchedSite).structureType == -1)) {
-        print(`BUILD ${touchedSite} BARRACKS-KNIGHT`); // TODO: Some Intelligence, Please?
-    } else {
-        // MOVE ALONG
-        // TODO: Get closest unoccupied Site
-        // Get there, innit? :)
-        print('WAIT');
-    }
-
-    var myQueen;
 
     var numUnits = parseInt(readline());
     for (var i = 0; i < numUnits; i++) {
@@ -66,21 +76,25 @@ while (true) {
         var unitType = parseInt(inputs[3]); // -1 = QUEEN, 0 = KNIGHT, 1 = ARCHER
         var health = parseInt(inputs[4]);
 
-        if (owner == 0 && unitType == -1) myQueen = { x:x, y:y, health:health }
+        if (owner == 0 && unitType == -1) gs.myQueen = { x:x, y:y, health:health };
     }
 
-    var closestSite = sites
-        .map(site => { distance: distance({ x: myQueen.x, y: myQueen.y}, {x: sites.x, y: sites.y}) })
-        .reduce((acc, curr) => curr.distance < acc.distance ? curr : distance);
+    printErr(`Queen: ${JSON.stringify(gs.myQueen)}`);
 
-    printErr(JSON.stringify(closestSite));
+    var s = Array.from(sites.values());
 
+    gs.sitesOwned = s.filter(friendly).length
 
-    // Write an action using print()
-    // To debug: printErr('Debug messages...');
+    if (gs.sitesOwned < 3) {
+        var closest = s
+        .filter(isEmpty)
+        .map(site => addDistance(site, gs.myQueen))
+        .reduce((acc, curr) => (curr.distance < acc.distance ? curr : acc));
+        print(CMD.build(closest, 'KNIGHT'));
+    } else {
+        print(CMD.wait);
+    }
 
-
-    // TRAINING ACTION
-    // Second line: A set of training instructions (TRAIN {listOfIds})
-    print('TRAIN');
+    var mySites = Array.from(sites.values()).filter(canTrain);
+    print(CMD.train(mySites));
 }
