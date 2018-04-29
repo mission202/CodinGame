@@ -6,6 +6,7 @@ const UNIT = {
 };
 const CMD = {
     wait: "WAIT",
+    move: (coord) => `MOVE ${coord.x} ${coord.y}`,
     barracks: (site, type) => `BUILD ${site.id} BARRACKS-${type}`,            // Will move if necessary.
     train: (sites) => `TRAIN ${sites.map(x => x.id).join(' ')}`.trim(),    // List of ID's to train at
     tower: (site) => `BUILD ${site.id} TOWER`
@@ -32,6 +33,12 @@ const distance = (a, b) => {
     var x = a.x - b.x;
     var y = a.y - b.y;
     return Math.round(Math.sqrt(x * x + y * y));
+};
+
+const sortByDistance = (a, b) => {
+    if (a.distance < b.distance) return -1;
+    if (a.distance > b.distance) return 1;
+    return 0;
 };
 
 const addDistance = (site, unit) => { return { distance: distance({ x: unit.x, y: unit.y }, { x: site.x, y: site.y }), ...site }; };
@@ -63,6 +70,12 @@ const surveyState = (sites, state) => {
         },
         enemy: {
             queen: state.units.find(x => !x.isFriendly && x.type === UNIT.queen),
+            units: {
+                all: state.units.filter(x => !x.isFriendly),
+                giants: state.units.filter(x => !x.isFriendly && x.type === UNIT.giant),
+                knights: state.units.filter(x => !x.isFriendly && x.type === UNIT.knight),
+                archers: state.units.filter(x => !x.isFriendly && x.type === UNIT.archer),
+            },
             sites: {
                 all: sites.filter(enemy),
                 giants: sites.filter(x => !friendly(x) && x.type === UNIT.giant),
@@ -104,8 +117,6 @@ while (true) {
         touchedSite: parseInt(inputs[1]),   // -1 if none
     };
 
-    printErr(`Turn: ${gs.turn} $${gs.gold}`);
-
     for (var i = 0; i < numSites; i++) {
         let inputs = readline().split(' ');
         let siteId = parseInt(inputs[0]);
@@ -145,13 +156,6 @@ while (true) {
     // Prioritise Sites Closest to Start (Distance from Queen on Turn #1)
     if (turn === 1) {
         let clone = Array.from(sites).map(x => addDistance(x, survey.my.queen));
-
-        const sortByDistance = (a, b) => {
-            if (a.distance < b.distance) return -1;
-            if (a.distance > b.distance) return 1;
-            return 0;
-        };
-
         clone.sort(sortByDistance)
         gs.priorities = clone.map(x => x.id);
     }
@@ -160,6 +164,15 @@ while (true) {
         if (survey.emptySites.length === 0)
             return CMD.wait;
 
+        // Make sure Queenie isn't about to get her royal butt kicked.
+        if (survey.my.queen.health <= 50 && survey.enemy.units.knights.length >= 4) {
+            // RUN HOME QUEENIE!
+            let evac = sites.find(x => x.id === gs.priorities[0]);
+
+            if (typeof(evac) !== 'undefined')
+                return CMD.move(evac);
+        }
+
         // Iterate through priorities on gs, if Empty, Archer, Knight, Giant then Towers
         for (let i = 0; i < gs.priorities.length; i++) {
             const site = sites.find(x => x.id === gs.priorities[i]);
@@ -167,7 +180,7 @@ while (true) {
             if (isEmpty(site)) {
                 if (i < 2) return CMD.barracks(site, UNIT.archer);
                 if (i < 3) return CMD.barracks(site, UNIT.knight);
-                if (i < 4) return CMD.barracks(site, UNIT.giant);
+                // if (i < 4) return CMD.barracks(site, UNIT.giant);
                 return CMD.tower(site);
             }
         }
@@ -176,7 +189,7 @@ while (true) {
     };
 
     print(getQueenCommand());
-    
+
     /* TODO: Want to Build Based on Risk Assessment
         Lots of:
         KNIGHTS - Need Archers
@@ -186,7 +199,7 @@ while (true) {
 
     let toTrain = [];
 
-    if (survey.enemy.sites.towers.length > 0 && survey.my.units.giants.length < 1) Array.prototype.push.apply(toTrain, survey.my.sites.giants);
+    // if (survey.enemy.sites.towers.length > 0 && survey.my.units.giants.length < 1) Array.prototype.push.apply(toTrain, survey.my.sites.giants);
     if (survey.my.units.archers.length < 3) Array.prototype.push.apply(toTrain, survey.my.sites.archers);
     /* if (survey.my.units.knights.length < 2) */ Array.prototype.push.apply(toTrain, survey.my.sites.knights);
 
