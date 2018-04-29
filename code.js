@@ -43,6 +43,7 @@ const canTrain = site => friendly(site) && site.canBuild;
 
 const surveyState = (sites, state) => {
     const result = {
+        emptySites: sites.filter(isEmpty),        
         my : {
             queen: state.units.find(x => x.isFriendly && x.type === UNIT.queen),
             units: {
@@ -52,6 +53,7 @@ const surveyState = (sites, state) => {
                 archers: state.units.filter(x => x.isFriendly && x.type === UNIT.archer),
             },
             sites: {
+                all: sites.filter(friendly),
                 canTrain: sites.filter(canTrain),
                 giants: sites.filter(x => canTrain(x) && x.type === UNIT.giant),
                 archers: sites.filter(x => canTrain(x) && x.type === UNIT.archer),
@@ -62,6 +64,7 @@ const surveyState = (sites, state) => {
         enemy: {
             queen: state.units.find(x => !x.isFriendly && x.type === UNIT.queen),
             sites: {
+                all: sites.filter(enemy),                
                 giants: sites.filter(x => !friendly(x) && x.type === UNIT.giant),
                 archers: sites.filter(x => !friendly(x) && x.type === UNIT.archer),
                 knights: sites.filter(x => !friendly(x) && x.type === UNIT.knight),
@@ -87,15 +90,22 @@ const sites = Array(numSites).fill({}).map(() => {
     };
 });
 
+let turn = 0;
+let gs = { };
+
 // game loop
 while (true) {
-    let inputs = readline().split(' ');
+    turn++;
 
-    const gs = {
+    let inputs = readline().split(' ');
+    gs = { ...gs,
+        turn: turn,
         units: [],
         gold: parseInt(inputs[0]),
         touchedSite: parseInt(inputs[1]),   // -1 if none
     };
+
+    printErr(`Turn: ${gs.turn} $${gs.gold}`);
 
     for (var i = 0; i < numSites; i++) {
         let inputs = readline().split(' ');
@@ -112,7 +122,8 @@ while (true) {
             canBuild: parseInt(inputs[5]) === 0,    // -1 No Structure, != 0 Cooldown
             type: barracksType(parseInt(inputs[6])) // -1 No Structure, 0 for KNIGHT, 1 for ARCHER, 2 for GIANT
         };
-        printErr(`Site: ${JSON.stringify(sites.find(s => s.id === siteId))}`);
+        
+        // printErr(`Site: ${JSON.stringify(sites.find(s => s.id === siteId))}`);
     }
 
     var numUnits = parseInt(readline());
@@ -132,16 +143,28 @@ while (true) {
 
     var survey = surveyState(sites, gs);
 
+    // Prioritise Sites Closest to Start (Distance from Queen on Turn #1)
+    if (turn === 1) {
+        let clone = Array.from(sites).map(x => addDistance(x, survey.my.queen));
+
+        const sortByDistance = (a, b) => {
+            if (a.distance < b.distance) return -1;
+            if (a.distance > b.distance) return 1;
+            return 0;
+        };
+
+        clone.sort(sortByDistance)
+        gs.priorities = clone;
+    }
+
+    printErr(`Site Priorities: ${JSON.stringify(gs.priorities.map(x => x.id))}`);    
+
     printErr(`Units:`)
     printErr(` Queen: ${JSON.stringify(survey.my.queen)}`);
     printErr(` Enemy Queen: ${JSON.stringify(survey.enemy.queen)}`);
 
-    gs.mySites = sites.filter(friendly);
-    gs.sitesOwned = gs.mySites.length;
-    gs.emptySites = sites.filter(isEmpty);
-    gs.enemyKnights = gs.units.filter(x => x.type === UNIT.knight);
 
-    if (gs.emptySites.length === 0) {
+    if (survey.emptySites.length === 0) {
         print(CMD.wait);
     } else {
         let closest = sites
@@ -149,15 +172,16 @@ while (true) {
             .map(site => addDistance(site, survey.my.queen))
             .reduce((acc, curr) => (curr.distance < acc.distance ? curr : acc));
 
-        if (gs.sitesOwned < 1) {
-            // Always Build GIANTs First
-            print(CMD.barracks(closest, UNIT.giant));
-        } else if (gs.sitesOwned < 2) {
+        let owned = survey.my.sites.all.length;
+        if (owned < 1) {
+            // ARCHERs
+            print(CMD.barracks(closest, UNIT.archer));
+        } else if (owned < 2) {
             // Then some KNIGHTs
             print(CMD.barracks(closest, UNIT.knight));
-        } else if (gs.sitesOwned < 3) {
-            // Then some ARCHERs
-            print(CMD.barracks(closest, UNIT.archer));
+        } else if (owned < 3) {
+            // Then GIANTs
+            print(CMD.barracks(closest, UNIT.giant));
         } else {
             // Spam Towers
             print(CMD.tower(closest));
@@ -175,7 +199,7 @@ while (true) {
     let archers = survey.my.sites.archers;
     let knights = survey.my.sites.knights;
 
-    printErr(`Avail Sites:: GIANTS ${JSON.stringify(giants)} ARCHERS ${JSON.stringify(archers)} KNIGHTS ${JSON.stringify(knights)}`);
+    printErr(`Avail Sites:: GIANTS ${JSON.stringify(giants.map(x => x.id))} ARCHERS ${JSON.stringify(archers.map(x => x.id))} KNIGHTS ${JSON.stringify(knights.map(x => x.id))}`);
     printErr(`Friendly Units:`);
     printErr(`  GIANTS ${JSON.stringify(survey.my.units.giants)}`);
     printErr(`  KNIGHTS ${JSON.stringify(survey.my.units.knights)}`);
@@ -187,7 +211,7 @@ while (true) {
     if (survey.my.units.archers.length < 3) Array.prototype.push.apply(toTrain, archers);    
     /* if (survey.my.units.knights.length < 2) */ Array.prototype.push.apply(toTrain, knights);
 
-    printErr(`Sites to Train: ${JSON.stringify(toTrain)}`);
+    printErr(`Sites to Train: ${JSON.stringify(toTrain.map(x => x.id))}`);
 
     print(CMD.train(toTrain));
 }
