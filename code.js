@@ -37,7 +37,6 @@ for (var i = 0; i < N; i++) {
 }
 
 const LETTERS = readline();
-printErr(`Letters in Play: ${LETTERS}`);
 
 var possibleWords = dictionary.filter(word => {
     let available = Array.from(LETTERS);
@@ -58,8 +57,5 @@ var possibleWords = dictionary.filter(word => {
     return true;
 });
 
-printErr(`Possible Words: ${JSON.stringify(possibleWords)}`);
 possibleWords.sort(byScore);
-possibleWords.forEach(w => printErr(`${w} ${scoreWord(w)}pts`));
-
 print(possibleWords[0]);
