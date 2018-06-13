@@ -1,8 +1,3 @@
-/**
- * Auto-generated code below aims at helping you parse
- * the standard input according to the problem statement.
- **/
-
 const dictionary = [];
 
 const points = {
@@ -26,15 +21,14 @@ const sum = (acc, curr) => acc + curr;
 const scoreWord = w => w.split('').map(l => scoreLetter(l)).reduce(sum);
 const byScore = (a, b) => scoreWord(b) - scoreWord(a);
 
-var N = parseInt(readline());
-for (var i = 0; i < N; i++) {
-    var word = readline();
-    dictionary.push(word);
+const N = parseInt(readline());
+for (let i = 0; i < N; i++) {
+    dictionary.push(readline());
 }
 
 const LETTERS = readline();
 
-var possibleWords = dictionary.filter(word => {
+let possibleWords = dictionary.filter(word => {
     let available = Array.from(LETTERS);
     if (word.length > LETTERS.length) return false;
 
