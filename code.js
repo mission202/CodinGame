@@ -5,9 +5,9 @@
 
 const dictionary = [];
 
-var points = {
-    'e, a, i, o, n, r, t, l, s, u' : 1,
-    'd, g' : 2,
+const points = {
+    'e, a, i, o, n, r, t, l, s, u': 1,
+    'd, g': 2,
     'b, c, m, p': 3,
     'f, h, v, w, y': 4,
     'k': 5,
@@ -16,15 +16,11 @@ var points = {
 };
 
 const scoreLetter = l => {
-    if ('e, a, i, o, n, r, t, l, s, u'.indexOf(l) != -1) return 1;
-    if ('d, g'.indexOf(l) != -1) return 2;
-    if ('b, c, m, p'.indexOf(l) != -1) return 3;
-    if ('f, h, v, w, y'.indexOf(l) != -1) return 4;
-    if ('k'.indexOf(l) != -1) return 5;
-    if ('j, x'.indexOf(l) != -1) return 8;
-    if ('q, z'.indexOf(l) != -1) return 10;
-    return 0;
-}
+    return Object.entries(points).reduce((acc, curr) => {
+        if (curr[0].indexOf(l) != -1) acc = curr[1];
+        return acc;
+    }, 0);
+};
 
 const sum = (acc, curr) => acc + curr;
 const scoreWord = w => w.split('').map(l => scoreLetter(l)).reduce(sum);
