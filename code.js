@@ -1,51 +1,21 @@
-const dictionary = [];
+const bracketsClosed = function (string) {
+    let chars = string.split('');
 
-const points = {
-    'e, a, i, o, n, r, t, l, s, u': 1,
-    'd, g': 2,
-    'b, c, m, p': 3,
-    'f, h, v, w, y': 4,
-    'k': 5,
-    'j, x': 8,
-    'q, z': 10
-};
+    const tracker = { '} {': 0, ') (': 0, '] [': 0 };
 
-const scoreLetter = l => {
-    return Object.entries(points).reduce((acc, curr) => {
-        if (curr[0].indexOf(l) != -1) acc = curr[1];
-        return acc;
-    }, 0);
-};
+    for (let i = 0; i < chars.length; i++) {
+        Object.entries(tracker).forEach(element => {
+            var idx = element[0].indexOf(chars[i]);
+            if (idx === -1) return;
 
-const sum = (acc, curr) => acc + curr;
-const scoreWord = w => w.split('').map(l => scoreLetter(l)).reduce(sum);
-const byScore = (a, b) => scoreWord(b) - scoreWord(a);
-
-const N = parseInt(readline());
-for (let i = 0; i < N; i++) {
-    dictionary.push(readline());
-}
-
-const LETTERS = readline();
-
-let possibleWords = dictionary.filter(word => {
-    let available = Array.from(LETTERS);
-    if (word.length > LETTERS.length) return false;
-
-    for (let i = 0; i < word.length; i++) {
-        let c = word.charAt(i);
-        let index = available.indexOf(c);
-        if (index === -1) {
-            return false;
-        }
-        else {
-            available.splice(index, 1);
-        }
+            let shift = tracker[element[0]] + (idx - 1);
+            if (shift === -1 && tracker[element[0]] === 0) return;
+            tracker[element[0]] = shift;
+        });
     }
 
-    // Still here? We can make the word!
-    return true;
-});
+    return Object.values(tracker).every(x => x === 0);
+};
 
-possibleWords.sort(byScore);
-print(possibleWords[0]);
+
+print(bracketsClosed(readline()));
