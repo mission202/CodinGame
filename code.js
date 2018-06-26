@@ -1,21 +1,16 @@
 const bracketsClosed = function (string) {
-    let chars = string.split('');
-
     const tracker = { '} {': 0, ') (': 0, '] [': 0 };
 
-    for (let i = 0; i < chars.length; i++) {
-        Object.entries(tracker).forEach(element => {
-            var idx = element[0].indexOf(chars[i]);
-            if (idx === -1) return;
-
-            let shift = tracker[element[0]] + (idx - 1);
-            if (shift === -1 && tracker[element[0]] === 0) return;
-            tracker[element[0]] = shift;
-        });
+    for (let char of string) {
+        for (let bracketType of Object.entries(tracker)) {
+            let value = bracketType[0].indexOf(char) - 1; // -1=Close 1=Open
+            if (value === -2) continue; // not this bracket type
+            if (bracketType[1] < 1 && value === -1) return false; // Trying to close unopened
+            tracker[bracketType[0]] = bracketType[1] + value;
+        }
     }
 
-    return Object.values(tracker).every(x => x === 0);
+    return Object.values(tracker).every(x => x <= 0);
 };
-
 
 print(bracketsClosed(readline()));
