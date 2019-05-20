@@ -1,6 +1,82 @@
 const p = s => console.error(s);
 const readInt = () => parseInt(readline());
 
+const distance = (a, b) => (a.x - b.x) + (a.y - b.y);
+
+p(`Distance: ${distance({ x: 0, y: 0 }, { x: 11, y: 11 })}`);
+
+class GameState {
+    constructor() {
+        this.myGold = 0;
+        this.myIncome = 0;
+        this.enemyGold = 0;
+        this.enemyIncome = 0;
+        this.entities = {
+            units: [],
+            buildings: [],
+            mines: []
+        }
+    }
+
+    newTurn() {
+        this.myGold = readInt();
+        this.myIncome = readInt();
+        p(`ME Gold: ${this.myGold} Income: ${this.myIncome}`);
+
+        this.enemyGold = readInt();
+        this.enemyIncome = readInt();
+        p(`THINE ENEMY Gold: ${this.enemyGold} Income: ${this.enemyIncome}`);
+
+        for (let i = 0; i < 12; i++) {
+            const line = readline();
+            p(line);
+        }
+
+        const buildingCount = readInt();
+        this.entities.buildings = [];
+        for (let i = 0; i < buildingCount; i++) {
+            const inputs = readline().split(' ');
+            const owner = parseInt(inputs[0]);
+            const buildingType = parseInt(inputs[1]);
+            const x = parseInt(inputs[2]);
+            const y = parseInt(inputs[3]);
+            this.entities.buildings.push({
+                isMine: owner === 0,
+                isEnemy: owner === 1,
+                isHQ: buildingType === 0,
+                x: x,
+                y: y
+            });
+        }
+
+        const unitCount = readInt();
+        this.entities.units = [];
+        for (let i = 0; i < unitCount; i++) {
+            var inputs = readline().split(' ');
+            const owner = parseInt(inputs[0]);
+            this.entities.units.push({
+                id: parseInt(inputs[1]),
+                isMine: owner === 0,
+                isEnemy: owner === 1,
+                level: parseInt(inputs[2]),
+                upkeep: 1,  /* TODO - Upkeep Cost Will Change for Higher Levels */
+                x: parseInt(inputs[3]),
+                y: parseInt(inputs[4])
+            });
+        }
+    }
+
+    find() {
+        return {
+            mine: () => this.entities.units.filter(x => x.isMine),
+            myHQ: () => this.entities.buildings.find(x => x.isMine && x.isHQ),
+            enemyHQ: () => this.entities.buildings.find(x => x.isEnemy && x.isHQ)
+        }
+    }
+}
+
+const state = new GameState();
+
 const numberMineSpots = parseInt(readline());
 for (let i = 0; i < numberMineSpots; i++) {
     var inputs = readline().split(' ');
@@ -10,65 +86,9 @@ for (let i = 0; i < numberMineSpots; i++) {
 
 // game loop
 while (true) {
-    const gold = readInt();
-    const income = readInt();
-
-    p(`Gold: ${gold} Income: ${income}`);
-
-    const opponentGold = readInt();
-    const opponentIncome = readInt();
-    for (let i = 0; i < 12; i++) {
-        const line = readline();
-        p(line);
-    }
-    const buildingCount = readInt();
-    const buildings = [ ];
-    for (let i = 0; i < buildingCount; i++) {
-        var inputs = readline().split(' ');
-        const owner = parseInt(inputs[0]);
-        const buildingType = parseInt(inputs[1]);
-        const x = parseInt(inputs[2]);
-        const y = parseInt(inputs[3]);
-
-        buildings.push({
-            isMine: owner === 0,
-            isEnemy: owner === 1,
-            isHQ: buildingType === 0,
-            x: x,
-            y: y
-        });
-    }
-
-    const unitCount = readInt();
-    const units = [];
-
-    const find = {
-        mine: () => units.filter(x => x.isMine),
-        myHQ: () => buildings.find(x => x.isMine && x.isHQ),
-        enemyHQ: () => buildings.find(x => x.isEnemy && x.isHQ)
-    };
-
-    for (let i = 0; i < unitCount; i++) {
-        var inputs = readline().split(' ');
-        const owner = parseInt(inputs[0]);
-        const unitId = parseInt(inputs[1]);
-        const level = parseInt(inputs[2]);
-        const x = parseInt(inputs[3]);
-        const y = parseInt(inputs[4]);
-
-        units.push({
-            id: unitId,
-            isMine: owner === 0,
-            isEnemy: owner === 1,
-            level: level,
-            upkeep: 1,  /* TODO - Upkeep Cost Will Change for Higher Levels */
-            x: x,
-            y: y
-        });
-    }
-
-    // Gamestate Init'd - Let's get to work!
-    const cmds = [ ];
+    state.newTurn();
+    
+    const cmds = [];
     const cmd = {
         move: (id, x, y) => cmds.push(`MOVE ${id} ${x} ${y}`),
         train: (level, x, y) => cmds.push(`TRAIN ${level} ${x} ${y}`),
