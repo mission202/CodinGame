@@ -1,7 +1,7 @@
 const p = s => console.error(s);
 const readInt = () => parseInt(readline());
 
-const distance = (a, b) => (a.x - b.x) + (a.y - b.y);
+const distance = (a, b) => Math.abs((a.x - b.x) + (a.y - b.y));
 
 p(`Distance: ${distance({ x: 0, y: 0 }, { x: 11, y: 11 })}`);
 
@@ -14,6 +14,7 @@ const cmd = {
 
 class GameState {
     constructor() {
+        this.map = [];
         this.cmds = [];
         this.myGold = 0;
         this.myIncome = 0;
@@ -27,6 +28,7 @@ class GameState {
     }
 
     newTurn() {
+        this.map = Array(144);
         this.cmds = [];
         this.myGold = readInt();
         this.myIncome = readInt();
@@ -36,9 +38,21 @@ class GameState {
         this.enemyIncome = readInt();
         p(`THINE ENEMY Gold: ${this.enemyGold} Income: ${this.enemyIncome}`);
 
-        for (let i = 0; i < 12; i++) {
-            const line = readline();
-            p(line);
+        for (let y = 0; y < 12; y++) {
+            const cells = readline().split();
+            p(cells.join());
+            cells.forEach((cell, x) => {
+                this.map.push({
+                    isVoid: cell === '#',
+                    isNeutral: cell === '.',
+                    ownedCaptured: cell === 'O',
+                    ownedInactive: cell === 'o',
+                    enemyCaptured: cell === 'X',
+                    enemyInactive: cell === 'x',
+                    x: x,
+                    y: y
+                });
+            });
         }
 
         const buildingCount = readInt();
@@ -76,10 +90,26 @@ class GameState {
     }
 
     find() {
+
+        const emptyEnemy = cell => !cell.isEnemy && this.entities.units.filter(x => x.isEnemy && x.x === cell.x && x.y == cell.y);
+
         return {
             mine: () => this.entities.units.filter(x => x.isMine),
             myHQ: () => this.entities.buildings.find(x => x.isMine && x.isHQ),
-            enemyHQ: () => this.entities.buildings.find(x => x.isEnemy && x.isHQ)
+            enemyHQ: () => this.entities.buildings.find(x => x.isEnemy && x.isHQ),
+            closestCapturable: () => {
+                const hq = this.entities.buildings.find(x => x.isMine && x.isHQ);
+                p(`My HQ: ${hq.x},${hq.y}`);
+                const capturable = this.map
+                    .filter(x => !(x.x === hq.x && x.y === hq.y))
+                    .filter(x => x.isNeutral || emptyEnemy(x))
+                    .map(x => ({ x: x.x, y: x.y, dist: distance(x, hq) }))
+                    .sort((a, b) => a.dist - b.dist);
+
+                // return capturable[0];
+
+                p(capturable.map(x => `${x.x},${x.y}@${x.dist}`).join(`  `));
+            }
         }
     }
 
@@ -89,8 +119,8 @@ class GameState {
 
     makeItSo() {
         return (this.cmds.length === 0)
-        ? cmd.wait()
-        : this.cmds.join(";");
+            ? cmd.wait()
+            : this.cmds.join(";");
     }
 }
 
@@ -108,11 +138,13 @@ while (true) {
     state.newTurn();
 
     var mine = state.find().mine();
-    p(JSON.stringify(mine));
     var upkeep = mine.reduce((a, x) => a + x.upkeep, 0);
     if ((state.myGold + state.myIncome) - upkeep >= 1) {
         p(`Able to Purchase Units...`);
         // Hacky deployment slot close to HQ
+        // TODO: Find closest I can deploy to HQ
+        const capturable = state.find().closestCapturable();
+
         const trainX = Math.max(1, state.find().myHQ().x - 1);
         const trainY = Math.max(0, state.find().myHQ().y);
 
