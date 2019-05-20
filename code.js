@@ -5,8 +5,16 @@ const distance = (a, b) => (a.x - b.x) + (a.y - b.y);
 
 p(`Distance: ${distance({ x: 0, y: 0 }, { x: 11, y: 11 })}`);
 
+const cmd = {
+    move: (id, x, y) => `MOVE ${id} ${x} ${y}`,
+    train: (level, x, y) => `TRAIN ${level} ${x} ${y}`,
+    wait: () => `WAIT`,
+    msg: s => `MSG ${s}`
+};
+
 class GameState {
     constructor() {
+        this.cmds = [];
         this.myGold = 0;
         this.myIncome = 0;
         this.enemyGold = 0;
@@ -19,6 +27,7 @@ class GameState {
     }
 
     newTurn() {
+        this.cmds = [];
         this.myGold = readInt();
         this.myIncome = readInt();
         p(`ME Gold: ${this.myGold} Income: ${this.myIncome}`);
@@ -73,6 +82,16 @@ class GameState {
             enemyHQ: () => this.entities.buildings.find(x => x.isEnemy && x.isHQ)
         }
     }
+
+    do(command) {
+        this.cmds.push(command);
+    }
+
+    makeItSo() {
+        return (this.cmds.length === 0)
+        ? cmd.wait()
+        : this.cmds.join(";");
+    }
 }
 
 const state = new GameState();
@@ -87,35 +106,23 @@ for (let i = 0; i < numberMineSpots; i++) {
 // game loop
 while (true) {
     state.newTurn();
-    
-    const cmds = [];
-    const cmd = {
-        move: (id, x, y) => cmds.push(`MOVE ${id} ${x} ${y}`),
-        train: (level, x, y) => cmds.push(`TRAIN ${level} ${x} ${y}`),
-        wait: () => cmds.push(`WAIT`),
-        msg: s => cmds.push(`MSG ${s}`)
-    };
 
-    var mine = find.mine();
+    var mine = state.find().mine();
+    p(JSON.stringify(mine));
     var upkeep = mine.reduce((a, x) => a + x.upkeep, 0);
-    p(`Upkeep: ${upkeep} Avail to Spend: ${(gold + income) - upkeep}`);
-    if ((gold + income) - upkeep >= 1) {
+    if ((state.myGold + state.myIncome) - upkeep >= 1) {
         p(`Able to Purchase Units...`);
         // Hacky deployment slot close to HQ
-        const trainX = Math.max(1, find.myHQ().x - 1);
-        const trainY = Math.max(0, find.myHQ().y);
+        const trainX = Math.max(1, state.find().myHQ().x - 1);
+        const trainY = Math.max(0, state.find().myHQ().y);
 
-        cmd.train(1, trainX, trainY);
+        state.do(cmd.train(1, trainX, trainY));
     }
 
-    if (mine.length === 0)
-        cmd.wait;
-    else /* Hack: Charge the enemy HQ. TODO: Land grab! */
-        mine.forEach(x => cmd.move(x.id, find.enemyHQ().x, find.enemyHQ().y));
-
-    if (cmds.length === 0) cmd.wait();
+    if (mine.length > 0) /* Hack: Charge the enemy HQ. TODO: Land grab! */
+        mine.forEach(x => state.do(cmd.move(x.id, state.find().enemyHQ().x, state.find().enemyHQ().y)));
 
     // TODO: Upkeep > Income? We're going to start dying!
 
-    console.log(cmds.join(";"))
+    console.log(state.makeItSo());
 }
