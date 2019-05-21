@@ -1,9 +1,17 @@
 const p = s => console.error(s);
-const readInt = io => parseInt(io.readline());
 
 const distance = (a, b) => Math.abs((a.x - b.x) + (a.y - b.y));
 
+// TIL about Symbol - Thanks @davidrhyswhite
+// https://medium.com/@davidrhyswhite/private-members-in-es6-db1ccd6128a5
+const readInt = Symbol('readInt');
+
 class GameState {
+
+    [readInt]() {
+        return parseInt(this.io.readline());
+    }
+
     constructor(io) {
         this.io = io;
         this.map = [];
@@ -21,7 +29,7 @@ class GameState {
     }
 
     init() {
-        const numberMineSpots = parseInt(this.io.readline());
+        const numberMineSpots = this[readInt]();
         for (let i = 0; i < numberMineSpots; i++) {
             var inputs = this.io.readline().split(' ');
             this.mines.push({
@@ -34,12 +42,12 @@ class GameState {
     newTurn() {
         this.map = Array(144);
         this.cmds = [];
-        this.myGold = readInt(this.io);
-        this.myIncome = readInt(this.io);
+        this.myGold = this[readInt]();
+        this.myIncome = this[readInt]();
         p(`ME Gold: ${this.myGold} Income: ${this.myIncome}`);
 
-        this.enemyGold = readInt(this.io);
-        this.enemyIncome = readInt(this.io);
+        this.enemyGold = this[readInt]();
+        this.enemyIncome = this[readInt]();
         p(`THINE ENEMY Gold: ${this.enemyGold} Income: ${this.enemyIncome}`);
 
         for (let y = 0; y < 12; y++) {
@@ -59,7 +67,7 @@ class GameState {
             });
         }
 
-        const buildingCount = readInt(this.io);
+        const buildingCount = this[readInt]();
         this.entities.buildings = [];
         for (let i = 0; i < buildingCount; i++) {
             const inputs = this.io.readline().split(' ');
@@ -76,7 +84,7 @@ class GameState {
             });
         }
 
-        const unitCount = readInt(this.io);
+        const unitCount = this[readInt]();
         this.entities.units = [];
         for (let i = 0; i < unitCount; i++) {
             var inputs = this.io.readline().split(' ');
