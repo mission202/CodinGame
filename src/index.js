@@ -2,10 +2,6 @@ const GameState = require('./GameState');
 
 const p = s => console.error(s);
 
-const distance = (a, b) => Math.abs((a.x - b.x) + (a.y - b.y));
-
-p(`Distance: ${distance({ x: 0, y: 0 }, { x: 11, y: 11 })}`);
-
 const cmd = {
     move: (id, x, y) => `MOVE ${id} ${x} ${y}`,
     train: (level, x, y) => `TRAIN ${level} ${x} ${y}`,
