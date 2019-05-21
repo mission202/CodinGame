@@ -1,13 +1,14 @@
-// TODO: Need to extract these to interface
 const p = s => console.error(s);
-const readInt = () => parseInt(readline());
+const readInt = io => parseInt(io.readline());
 
 const distance = (a, b) => Math.abs((a.x - b.x) + (a.y - b.y));
 
 class GameState {
-    constructor() {
+    constructor(io) {
+        this.io = io;
         this.map = [];
         this.cmds = [];
+        this.mines = [];
         this.myGold = 0;
         this.myIncome = 0;
         this.enemyGold = 0;
@@ -19,19 +20,30 @@ class GameState {
         }
     }
 
+    init() {
+        const numberMineSpots = parseInt(this.io.readline());
+        for (let i = 0; i < numberMineSpots; i++) {
+            var inputs = this.io.readline().split(' ');
+            this.mines.push({
+                x: parseInt(inputs[0]),
+                y: parseInt(inputs[1])
+            });
+        }
+    }
+
     newTurn() {
         this.map = Array(144);
         this.cmds = [];
-        this.myGold = readInt();
-        this.myIncome = readInt();
+        this.myGold = readInt(this.io);
+        this.myIncome = readInt(this.io);
         p(`ME Gold: ${this.myGold} Income: ${this.myIncome}`);
 
-        this.enemyGold = readInt();
-        this.enemyIncome = readInt();
+        this.enemyGold = readInt(this.io);
+        this.enemyIncome = readInt(this.io);
         p(`THINE ENEMY Gold: ${this.enemyGold} Income: ${this.enemyIncome}`);
 
         for (let y = 0; y < 12; y++) {
-            const cells = readline().split();
+            const cells = this.io.readline().split();
             p(cells.join());
             cells.forEach((cell, x) => {
                 this.map.push({
@@ -47,10 +59,10 @@ class GameState {
             });
         }
 
-        const buildingCount = readInt();
+        const buildingCount = readInt(this.io);
         this.entities.buildings = [];
         for (let i = 0; i < buildingCount; i++) {
-            const inputs = readline().split(' ');
+            const inputs = this.io.readline().split(' ');
             const owner = parseInt(inputs[0]);
             const buildingType = parseInt(inputs[1]);
             const x = parseInt(inputs[2]);
@@ -64,10 +76,10 @@ class GameState {
             });
         }
 
-        const unitCount = readInt();
+        const unitCount = readInt(this.io);
         this.entities.units = [];
         for (let i = 0; i < unitCount; i++) {
-            var inputs = readline().split(' ');
+            var inputs = this.io.readline().split(' ');
             const owner = parseInt(inputs[0]);
             this.entities.units.push({
                 id: parseInt(inputs[1]),

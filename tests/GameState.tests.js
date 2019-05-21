@@ -1,13 +1,32 @@
 const GameState = require('../src/GameState');
 
-describe('Wallaby.js should be working.', () => {
-    test ('this should be green', () => {
-        expect(true).toBe(true);
-    });
-})
+let input = [];
+let output = [];
+
+const io = {
+    readline: () => input.shift(),
+    writeline: s => output.push(s)
+};
 
 describe('GameState', function () {
 
-    // Coming soon
+    const gs = new GameState(io);
+
+    describe('.init()', () => {
+
+        it('should read in the mine locations', () => {
+            input = [
+                '3',
+                '0 0',
+                '1 1',
+                '2 2',
+            ];
+
+            gs.init();
+
+            expect(gs.mines.length).toBe(3);
+        });
+
+    });
 
 });

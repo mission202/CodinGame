@@ -9,14 +9,14 @@ const cmd = {
     msg: s => `MSG ${s}`
 };
 
-const state = new GameState();
+const io = {
+    readline: () => readline(),
+    writeline: console.log
+};
 
-const numberMineSpots = parseInt(readline());
-for (let i = 0; i < numberMineSpots; i++) {
-    var inputs = readline().split(' ');
-    const x = parseInt(inputs[0]);
-    const y = parseInt(inputs[1]);
-}
+const state = new GameState(io);
+
+state.init();
 
 // game loop
 while (true) {
